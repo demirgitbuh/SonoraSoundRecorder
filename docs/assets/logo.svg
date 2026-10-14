@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="128" height="128"><style>
+.lb{transform-box:fill-box;transform-origin:center;animation:lb 1.4s ease-in-out infinite alternate}
+.l1{animation-delay:-.2s}.l2{animation-delay:-.7s}.l3{animation-delay:-.1s}.l4{animation-delay:-.9s}.l5{animation-delay:-.4s}
+@keyframes lb{from{transform:scaleY(.55)}to{transform:scaleY(1.08)}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important}}</style>
+<g transform="translate(0,0) scale(1)">
+  <rect x="64" y="64" width="896" height="896" rx="228" fill="#36454F"/>
+  <g fill="none" stroke="#F8F8FF" stroke-linecap="round" stroke-linejoin="round" stroke-width="84">
+    <path d="M690 336C652 278 590 250 512 250C414 250 340 302 340 372C340 410 348 440 363 460"/>
+    <path d="M334 688C372 746 434 774 512 774C610 774 684 722 684 652C684 614 676 584 661 564"/>
+  </g>
+  <g stroke="#F8F8FF" stroke-linecap="round" stroke-width="34">
+    <line class="lb l1" x1="436" y1="446" x2="436" y2="526"/>
+    <line class="lb l2" x1="474" y1="419" x2="474" y2="579"/>
+    <line class="lb l3" x1="512" y1="392" x2="512" y2="632"/>
+    <line class="lb l4" x1="550" y1="445" x2="550" y2="605"/>
+    <line class="lb l5" x1="588" y1="498" x2="588" y2="578"/>
+  </g>
+</g></svg>
