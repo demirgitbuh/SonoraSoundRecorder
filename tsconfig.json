@@ -1,0 +1,8 @@
+{
+  "//": "Editor-only umbrella config. CI type checks run against tsconfig.node.json and tsconfig.web.json.",
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": {
+    "types": ["node", "vite/client"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "electron.vite.config.ts", "vitest.config.ts"]
+}

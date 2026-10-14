@@ -1,0 +1,106 @@
+# Sonora Sound Recorder packaging configuration.
+# Packages are produced on GitHub Actions only (see .github/workflows). Each runner builds
+# exactly one operating system and one CPU architecture, and the native helper binaries are
+# taken from vendor/bin/${os}-${arch}, so packages for different architectures never mix.
+appId: io.github.demirgitbuh.sonora
+productName: Sonora Sound Recorder
+copyright: Copyright © 2026 demirgitbuh. Licensed under GPL-3.0.
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - out/**
+  - package.json
+  - "!**/*.map"
+
+asar: true
+
+extraResources:
+  - from: vendor/bin/${os}-${arch}
+    to: bin
+  - from: vendor/licenses
+    to: licenses
+  - from: resources/icons
+    to: icons
+  - from: LICENSE
+    to: LICENSE.txt
+  - from: THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+
+publish:
+  provider: github
+  owner: demirgitbuh
+  repo: SonoraSoundRecorder
+  releaseType: release
+
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  multiLanguageInstaller: true
+  displayLanguageSelector: true
+  installerLanguages: [en_US, tr_TR, de_DE, fr_FR, zh_CN, ru_RU]
+  license: build/license.txt
+  include: build/installer.nsh
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Sonora Sound Recorder
+  uninstallDisplayName: Sonora Sound Recorder
+  artifactName: Sonora-Sound-Recorder-${version}-Setup-${arch}.${ext}
+
+portable:
+  artifactName: Sonora-Sound-Recorder-${version}-Portable-${arch}.${ext}
+
+mac:
+  icon: build/icon.png
+  category: public.app-category.music
+  minimumSystemVersion: "12.0"
+  # No Apple Developer ID is available, so the app is ad-hoc signed (required on Apple
+  # silicon). Hardened runtime is disabled because it rejects ad-hoc signed Electron frameworks.
+  identity: "-"
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  darkModeSupport: true
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  extendInfo:
+    NSMicrophoneUsageDescription: Sonora Sound Recorder records audio from the microphone you select.
+    NSAudioCaptureUsageDescription: Sonora Sound Recorder records your computer's audio output when you choose system audio as a source.
+
+dmg:
+  artifactName: Sonora-Sound-Recorder-${version}-${arch}.${ext}
+  writeUpdateInfo: false
+
+linux:
+  icon: build/icon.png
+  category: AudioVideo
+  executableName: sonora-sound-recorder
+  maintainer: demirgitbuh
+  vendor: demirgitbuh
+  synopsis: Desktop sound recorder for microphone and system audio
+  description: Sonora Sound Recorder records microphone and system audio, edits and exports recordings, and transcribes speech locally.
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+
+appImage:
+  artifactName: Sonora-Sound-Recorder-${version}-${arch}.${ext}
+  license: build/license.txt
+
+deb:
+  artifactName: sonora-sound-recorder_${version}_${arch}.${ext}
+  packageName: sonora-sound-recorder

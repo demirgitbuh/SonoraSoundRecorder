@@ -1,0 +1,14 @@
+node_modules/
+out/
+dist/
+vendor/bin/
+vendor/whisper-build/
+coverage/
+*.log
+.DS_Store
+Thumbs.db
+# Generated in CI from the SVG sources in build/icon-src
+build/icon.png
+resources/icons/*.png
+# Copied from LICENSE by scripts/prepare-resources.mjs
+build/license.txt
