@@ -1,6 +1,8 @@
 import { join } from 'node:path'
-import { Notification, app, desktopCapturer, dialog, globalShortcut, nativeTheme, session, shell } from 'electron'
+import { Menu, Notification, app, desktopCapturer, dialog, globalShortcut, nativeTheme, session, shell } from 'electron'
 import type { BootstrapData, EngineCommand, EngineSnapshot, NotifyRequest } from '../shared/ipc'
+import { effectiveDeveloper, whisperExtraArgs } from '../shared/developer'
+import type { BinaryKind } from '../shared/developer'
 import { translate } from '../shared/i18n'
 import type { MessageKey, TranslateParams } from '../shared/i18n'
 import { shouldDeliver } from '../shared/notify-policy'
@@ -22,6 +24,7 @@ import { UpdateService } from './services/updater'
 import { ShortcutService } from './services/shortcut-service'
 import { JsonFile } from './services/json-store'
 import { scheduleSchema } from '../shared/library-schema'
+import { bootFlagsFor } from './services/boot-flags'
 import {
   capabilities,
   currentPlatform,
@@ -34,8 +37,12 @@ import {
 } from './services/platform'
 
 // ----------------------------------------------------------------------------- before ready
-const featureFlags = loopbackFeatureFlags()
-if (featureFlags.length > 0) app.commandLine.appendSwitch('enable-features', featureFlags.join(','))
+// Chromium switches, including the developer ones, must be set before the app is ready.
+const platformFeatures = loopbackFeatureFlags()
+const appliedBoot = bootFlagsFor(app.getPath('userData'), platformFeatures)
+if (appliedBoot.enableFeatures.length > 0) app.commandLine.appendSwitch('enable-features', appliedBoot.enableFeatures.join(','))
+if (appliedBoot.disableFeatures.length > 0) app.commandLine.appendSwitch('disable-features', appliedBoot.disableFeatures.join(','))
+if (!appliedBoot.hardwareAcceleration) app.disableHardwareAcceleration()
 if (process.platform === 'win32') app.setAppUserModelId('io.github.demirgitbuh.sonora')
 registerSchemes()
 
@@ -61,6 +68,19 @@ async function start(): Promise<void> {
   const loaded = await settings.load(osTheme)
   nativeTheme.themeSource = settings.value.theme
   if (loaded.firstRun) logger.info('app', `first run, theme ${osTheme}`)
+  const dev = () => effectiveDeveloper(settings.value.developer)
+  logger.setLevel(dev().logging.level)
+  if (settings.value.developer.enabled) {
+    logger.info('dev', `developer mode on; chromium: hw=${appliedBoot.hardwareAcceleration} enable=${appliedBoot.enableFeatures.join(',') || '-'} disable=${appliedBoot.disableFeatures.join(',') || '-'}`)
+  }
+
+  // No default menu: its reload and DevTools shortcuts would bypass the recorder's safety. macOS
+  // keeps the application, edit and window menus that text fields and Cmd+Q rely on.
+  if (process.platform === 'darwin') {
+    Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]))
+  } else {
+    Menu.setApplicationMenu(null)
+  }
 
   const locale = (): Locale => settings.value.language ?? systemLocale()
   const t = (key: MessageKey, params?: TranslateParams): string => translate(locale(), key, params)
@@ -69,8 +89,13 @@ async function start(): Promise<void> {
   const exe = (name: string): string => join(binDir, process.platform === 'win32' ? `${name}.exe` : name)
   const iconsDir = app.isPackaged ? join(process.resourcesPath, 'icons') : join(app.getAppPath(), 'resources', 'icons')
 
-  const ffmpeg = new Ffmpeg(exe('ffmpeg'), exe('ffprobe'), logger)
-  if (!ffmpeg.available) logger.error('app', `ffmpeg not found in ${binDir}`)
+  const bundledBinaries: Record<BinaryKind, string> = { ffmpeg: exe('ffmpeg'), ffprobe: exe('ffprobe'), whisper: exe('whisper-cli') }
+  const binaryPath = (kind: BinaryKind): string => dev().binaries[kind] ?? bundledBinaries[kind]
+  const tmpDir = join(app.getPath('temp'), 'sonora-sound-recorder')
+
+  const ffmpeg = new Ffmpeg(binaryPath('ffmpeg'), binaryPath('ffprobe'), logger)
+  ffmpeg.logCommands = dev().logging.commandLines
+  if (!ffmpeg.available) logger.error('app', `ffmpeg not found at ${ffmpeg.ffmpegPath}`)
 
   const library = new LibraryStore({
     dataDir: userData,
@@ -87,20 +112,24 @@ async function start(): Promise<void> {
       const key = (err as NodeJS.ErrnoException).code === 'ENOSPC' ? 'errors.diskFull' : 'errors.writeFailed'
       windows?.sendMain('rec:failed', { runId, errorKey: key })
       notify({ kind: 'error', titleKey: 'notify.recordingFailed', bodyKey: key })
-    }
+    },
+    syncIntervalMs: () => dev().storage.syncIntervalMs
   })
   const audio = new AudioService({ ffmpeg, library, runs, logger, recordingsDir: () => settings.value.files.recordingsDir })
   await audio.recoverInterruptedReplaces()
 
   const transcription = new TranscriptionService({
-    whisperPath: exe('whisper-cli'),
+    whisperPath: () => binaryPath('whisper'),
     ffmpeg,
     library,
     logger,
-    tmpDir: join(app.getPath('temp'), 'sonora-sound-recorder'),
+    tmpDir,
     modelPath: () => settings.value.transcription.modelPath,
     language: () => settings.value.transcription.language,
     threads: () => settings.value.transcription.threads,
+    extraArgs: () => whisperExtraArgs(dev().whisper),
+    keepTempFiles: () => dev().storage.keepTempFiles,
+    logCommands: () => dev().logging.commandLines,
     emit: (p) => windows?.send('transcribe:progress', p)
   })
 
@@ -130,12 +159,14 @@ async function start(): Promise<void> {
       await Promise.all([settings.flush(), library.flush(), schedules.flush()])
       globalShortcut.unregisterAll()
     },
+    allowPrerelease: () => dev().updates.allowPrerelease,
     emit: (s) => windows?.send('update:status', s)
   })
 
   let quitConfirmed = false
   let quitInProgress = false
   let quitAck: (() => void) | null = null
+  let relaunchRequested = false
 
   windows = new WindowManager({
     settings,
@@ -144,7 +175,15 @@ async function start(): Promise<void> {
     iconsDir,
     onHidden: () => logger.info('window', 'main window hidden to tray'),
     onFocusChange: (focused) => shortcuts.setAppFocused(focused),
-    isQuitting: () => quitConfirmed
+    isQuitting: () => quitConfirmed,
+    devToolsShortcut: () => settings.value.developer.enabled && settings.value.developer.ui.devToolsShortcut,
+    onMainRendererGone: async () => {
+      // The recorder lost its audio graph: close its runs so they are offered as recovered recordings.
+      await runs.endAll(true)
+      quitAck?.()
+      quitAck = null
+      ctx.setEngineSnapshot({ sessions: [], selectedId: null, unsavedPreviews: 0 })
+    }
   })
   const win = windows
 
@@ -237,11 +276,18 @@ async function start(): Promise<void> {
       await Promise.all([settings.flush(), library.flush(), schedules.flush()])
       shortcuts.unregisterAll()
       quitConfirmed = true
-      logger.info('app', 'quitting')
+      logger.info('app', relaunchRequested ? 'restarting' : 'quitting')
+      if (relaunchRequested) app.relaunch({ args: process.argv.slice(1).filter((a) => a !== '--hidden') })
       app.quit()
     } finally {
       quitInProgress = false
     }
+  }
+
+  async function requestRelaunch(): Promise<void> {
+    relaunchRequested = true
+    await requestQuit()
+    if (!quitConfirmed) relaunchRequested = false
   }
 
   const ctx: AppContext = {
@@ -283,6 +329,8 @@ async function start(): Promise<void> {
       win.send('runs:changed', await runs.listPending())
     },
     requestQuit,
+    requestRelaunch,
+    developer: { bundledBinaries, binaryPath, appliedBoot, platformFeatures, binDir, tmpDir },
     onQuitAck: () => {
       quitAck?.()
       quitAck = null
@@ -349,8 +397,21 @@ async function start(): Promise<void> {
       void setAutostart(s.launchAtLogin, s.startHiddenAtLogin, logger)
     }
     if (JSON.stringify(s.shortcuts) !== JSON.stringify(prev.shortcuts)) shortcuts.apply(s.shortcuts.bindings, s.shortcuts.scope)
+    const nextDev = effectiveDeveloper(s.developer)
+    const prevDev = effectiveDeveloper(prev.developer)
+    if (nextDev.logging.level !== prevDev.logging.level) logger.setLevel(nextDev.logging.level)
+    ffmpeg.logCommands = nextDev.logging.commandLines
+    if (JSON.stringify(nextDev.binaries) !== JSON.stringify(prevDev.binaries)) {
+      ffmpeg.setPaths(binaryPath('ffmpeg'), binaryPath('ffprobe'))
+      logger.info('dev', `binaries: ffmpeg=${ffmpeg.ffmpegPath} ffprobe=${ffmpeg.ffprobePath} whisper=${binaryPath('whisper')}`)
+    }
+    if (s.developer.enabled !== prev.developer.enabled) logger.info('dev', `developer mode ${s.developer.enabled ? 'on' : 'off'}`)
   })
   library.onChange((snap) => win.send('library:changed', snap))
+  // Live log for the developer page; nothing is sent unless developer mode is on.
+  logger.subscribe((entry) => {
+    if (settings.value.developer.enabled) win.sendMain('dev:log', entry)
+  })
 
   shortcuts.apply(settings.value.shortcuts.bindings, settings.value.shortcuts.scope)
 

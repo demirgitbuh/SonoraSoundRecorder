@@ -1,5 +1,6 @@
 import type { BrowserWindow } from 'electron'
 import type { BootstrapData, EngineCommand, EngineSnapshot, NotifyRequest } from '../shared/ipc'
+import type { BinaryKind, ChromiumBootFlags } from '../shared/developer'
 import type { MessageKey, TranslateParams } from '../shared/i18n'
 import type { Schedule, ThemeName } from '../shared/types'
 import type { AudioService } from './services/audio-service'
@@ -14,6 +15,18 @@ import type { TranscriptionService } from './services/transcription'
 import type { UpdateService } from './services/updater'
 import type { TrayManager } from './tray'
 import type { WindowManager } from './windows'
+
+/** Runtime facts used by the developer page. */
+export interface DeveloperContext {
+  bundledBinaries: Record<BinaryKind, string>
+  /** Executable in use: the developer override when developer mode is on, the bundled one otherwise. */
+  binaryPath: (kind: BinaryKind) => string
+  /** Chromium switches applied when this process started. */
+  appliedBoot: ChromiumBootFlags
+  platformFeatures: string[]
+  binDir: string
+  tmpDir: string
+}
 
 /** Everything the IPC layer needs from the running application. */
 export interface AppContext {
@@ -39,6 +52,9 @@ export interface AppContext {
   setEngineSnapshot: (s: EngineSnapshot) => void
   broadcastRuns: () => Promise<void>
   requestQuit: () => Promise<void>
+  /** Quits through the normal quit flow and starts Sonora again. */
+  requestRelaunch: () => Promise<void>
+  developer: DeveloperContext
   onQuitAck: () => void
   onRendererReady: (win: BrowserWindow | null) => void
 }

@@ -3,6 +3,7 @@ import { AUDIO_FORMATS, LOCALES } from './types'
 import type { CustomEncoding, SessionConfig, ThemeName } from './types'
 import { DEFAULT_CUSTOM_ENCODING } from './formats'
 import { DEFAULT_BINDINGS } from './shortcuts'
+import { developerSchema } from './developer'
 
 /**
  * Settings are validated field by field: a missing or invalid value falls back to its default
@@ -150,7 +151,8 @@ export const settingsSchema = z.object({
       y: z.number().int().nullable().catch(null),
       maximized: z.boolean().catch(false)
     })
-    .catch({ width: null, height: null, x: null, y: null, maximized: false })
+    .catch({ width: null, height: null, x: null, y: null, maximized: false }),
+  developer: developerSchema
 })
 
 export type Settings = z.infer<typeof settingsSchema>
@@ -281,7 +283,8 @@ export const SETTINGS_CATEGORIES = [
   'notifications',
   'transcription',
   'updates',
-  'advanced'
+  'advanced',
+  'developer'
 ] as const
 export type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number]
 
@@ -327,6 +330,10 @@ export function resetCategory(current: Settings, category: SettingsCategory, sys
       break
     case 'advanced':
       s.archive = d.archive
+      break
+    case 'developer':
+      // Developer mode stays as it is; every developer value returns to its default.
+      s.developer = { ...d.developer, enabled: current.developer.enabled }
       break
   }
   return s
@@ -432,6 +439,7 @@ export function mergeImported(current: Settings, imported: Settings, accepted: M
     next.sessions = next.sessions.map((s) => ({ ...s, micDeviceId: null, systemDeviceId: null }))
   }
   if (!next.sessions.some((s) => s.id === next.selectedSessionId)) next.selectedSessionId = next.sessions[0]?.id ?? null
+  keepMachineDeveloperValues(next, current)
   return settingsSchema.parse(next)
 }
 
@@ -454,7 +462,14 @@ export interface SettingsProfile {
 }
 
 export function applyProfile(current: Settings, profile: SettingsProfile): Settings {
-  return applySettingsPatch(current, profile.settings as SettingsPatch)
+  const next = applySettingsPatch(current, profile.settings as SettingsPatch)
+  keepMachineDeveloperValues(next, current)
+  return next
+}
+
+/** Binary paths and Chromium switches belong to one computer and are never taken from a file or profile. */
+function keepMachineDeveloperValues(next: Settings, current: Settings): void {
+  next.developer = { ...next.developer, binaries: { ...current.developer.binaries }, chromium: { ...current.developer.chromium } }
 }
 
 export const profilesFileSchema = z.object({

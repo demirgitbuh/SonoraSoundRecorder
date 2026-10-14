@@ -24,6 +24,7 @@ import {
   Minus,
   Settings,
   Star,
+  Terminal,
   Trash2,
   TriangleAlert,
   X
@@ -87,6 +88,7 @@ export function Sidebar({ compact }: { compact: boolean }) {
   const setUpdateDialog = useApp((s) => s.setUpdateDialog)
   const recording = useEngine((s) => Object.values(s.sessions).some((x) => x.state === 'recording' || x.state === 'paused'))
   const trashCount = useLibrary((s) => s.recordings.filter((r) => r.trash).length)
+  const developer = useApp((s) => s.settings?.developer.enabled ?? false)
   const current = route.name === 'editor' ? route.back : route.name
   const item = (r: Route, Icon: LucideIcon, key: MessageKey, badge?: ReactNode) => {
     const selected = current === r
@@ -133,7 +135,10 @@ export function Sidebar({ compact }: { compact: boolean }) {
           {!compact && <span className="truncate">{t('update.badge', { version: update.release?.version ?? '' })}</span>}
         </button>
       )}
-      <ul className="nav-list">{item('settings', Settings, 'nav.settings')}</ul>
+      <ul className="nav-list">
+        {developer && item('developer', Terminal, 'nav.developer')}
+        {item('settings', Settings, 'nav.settings')}
+      </ul>
     </nav>
   )
 }

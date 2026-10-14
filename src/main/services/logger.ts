@@ -1,18 +1,26 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { LogEntry } from '../../shared/developer'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 const MAX_FILE_BYTES = 1024 * 1024
 const MAX_FILES = 5
 const MAX_MESSAGE_CHARS = 2000
+const RECENT_ENTRIES = 1000
+const LEVEL_RANK: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 }
 
 /**
  * Small rotating file logger. Only technical messages are written; callers must never pass
  * audio content or transcript text. Messages are truncated and stripped of control characters.
+ * The most recent entries are also kept in memory for the developer page.
  */
 export class Logger {
   private readonly file: string
+  private minLevel: LogLevel = 'info'
+  private seq = 0
+  private readonly recentEntries: LogEntry[] = []
+  private readonly listeners = new Set<(entry: LogEntry) => void>()
 
   constructor(private readonly dir: string) {
     mkdirSync(dir, { recursive: true })
@@ -23,8 +31,28 @@ export class Logger {
     return this.dir
   }
 
+  /** Lowest level that is written. Errors are always written. */
+  get level(): LogLevel {
+    return this.minLevel
+  }
+
+  setLevel(level: LogLevel): void {
+    this.minLevel = level
+  }
+
+  recent(): LogEntry[] {
+    return [...this.recentEntries]
+  }
+
+  subscribe(listener: (entry: LogEntry) => void): () => void {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
   debug(scope: string, message: string): void {
-    if (process.env.SONORA_DEBUG) this.write('debug', scope, message)
+    this.write('debug', scope, message)
   }
 
   info(scope: string, message: string): void {
@@ -40,11 +68,20 @@ export class Logger {
     this.write('error', scope, detail ? `${message} | ${detail}` : message)
   }
 
+  private enabled(level: LogLevel): boolean {
+    if (level === 'error') return true
+    if (level === 'debug' && process.env.SONORA_DEBUG) return true
+    return LEVEL_RANK[level] >= LEVEL_RANK[this.minLevel]
+  }
+
   write(level: LogLevel, scope: string, message: string): void {
+    if (!this.enabled(level)) return
     const clean = String(message)
       .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ')
       .slice(0, MAX_MESSAGE_CHARS)
-    const line = `${new Date().toISOString()} [${level.toUpperCase()}] [${scope.slice(0, 40)}] ${clean}\n`
+    const time = new Date().toISOString()
+    const shortScope = scope.slice(0, 40)
+    const line = `${time} [${level.toUpperCase()}] [${shortScope}] ${clean}\n`
     try {
       this.rotateIfNeeded()
       appendFileSync(this.file, line, 'utf8')
@@ -53,6 +90,16 @@ export class Logger {
     }
     if (process.env.NODE_ENV === 'development' || process.env.SONORA_DEBUG) {
       process.stdout.write(line)
+    }
+    const entry: LogEntry = { seq: ++this.seq, time, level, scope: shortScope, message: clean }
+    this.recentEntries.push(entry)
+    if (this.recentEntries.length > RECENT_ENTRIES) this.recentEntries.splice(0, this.recentEntries.length - RECENT_ENTRIES)
+    for (const listener of this.listeners) {
+      try {
+        listener(entry)
+      } catch {
+        // A failing listener must not affect logging.
+      }
     }
   }
 

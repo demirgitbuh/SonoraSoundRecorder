@@ -10,6 +10,8 @@ import { SettingsPage } from './pages/SettingsPage'
 import { EditorPage } from './pages/EditorPage'
 import { Onboarding } from './pages/Onboarding'
 import { NameDialog, RecoveryDialog, UpdateDialog } from './pages/Dialogs'
+import { DeveloperPage, PerfOverlay } from './pages/DeveloperPage'
+import { engine } from './audio/engine'
 import { useT } from './i18n'
 
 function Page() {
@@ -27,6 +29,8 @@ function Page() {
       return <TrashPage />
     case 'settings':
       return <SettingsPage />
+    case 'developer':
+      return <DeveloperPage />
     case 'editor':
       return <EditorPage source={route.source} />
   }
@@ -35,7 +39,7 @@ function Page() {
 export function App() {
   const t = useT()
   useDocumentPrefs()
-  useInAppShortcuts()
+  useInAppShortcuts((action) => void engine.handle({ action, origin: 'shortcut' }))
   const settings = useApp((s) => s.settings)
   const route = useApp((s) => s.route)
   const compact = useMediaQuery('(max-width: 899px)')
@@ -79,6 +83,7 @@ export function App() {
           <UpdateDialog />
           <RecoveryDialog />
           <NameDialog />
+          {settings.developer.enabled && settings.developer.ui.perfOverlay && <PerfOverlay />}
         </div>
       )}
     </MotionConfig>

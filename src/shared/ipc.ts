@@ -34,6 +34,19 @@ import type {
   Transcript
 } from './types'
 import type { MachineFieldKey, Settings, SettingsCategory, SettingsPatch, SettingsProfile } from './settings'
+import type {
+  BinaryInfo,
+  BinaryKind,
+  BootFlagsState,
+  DataFileName,
+  DevDiagnostics,
+  DevMetrics,
+  DevPathId,
+  DevStorageEntry,
+  LogEntry,
+  ProbeOutput,
+  TempCleanup
+} from './developer'
 
 export type WindowKind = 'main' | 'mini'
 
@@ -240,7 +253,9 @@ export interface AutostartStatus {
   noteKey: string | null
 }
 
-export type Route = 'record' | 'archive' | 'favorites' | 'collections' | 'trash' | 'settings'
+export type Route = 'record' | 'archive' | 'favorites' | 'collections' | 'trash' | 'settings' | 'developer'
+
+export type ProbeSource = { kind: 'file' } | { kind: 'recording'; id: string }
 
 export interface InvokeMap {
   'app:bootstrap': { args: []; result: BootstrapData }
@@ -319,6 +334,21 @@ export interface InvokeMap {
   'window:show-main': { args: [route: Route | null]; result: void }
   'engine:dispatch': { args: [command: EngineCommand]; result: void }
   'engine:snapshot': { args: []; result: EngineSnapshot }
+  'dev:diagnostics': { args: []; result: DevDiagnostics }
+  'dev:metrics': { args: []; result: DevMetrics }
+  'dev:boot-flags': { args: []; result: BootFlagsState }
+  'dev:logs': { args: []; result: LogEntry[] }
+  'dev:storage': { args: []; result: DevStorageEntry[] }
+  'dev:read-data': { args: [name: DataFileName]; result: string }
+  'dev:open-path': { args: [id: DevPathId]; result: void }
+  'dev:set-binary': { args: [kind: BinaryKind, choose: boolean]; result: BinaryInfo | null }
+  'dev:probe': { args: [source: ProbeSource]; result: ProbeOutput | null }
+  'dev:test-tone': { args: [frequencyHz: number, seconds: number]; result: BulkResult }
+  'dev:clear-temp': { args: []; result: TempCleanup }
+  'dev:open-devtools': { args: [target: 'main' | 'mini']; result: boolean }
+  'dev:reload': { args: []; result: void }
+  'dev:relaunch': { args: []; result: void }
+  'dev:crash-renderer': { args: []; result: void }
 }
 
 export type InvokeChannel = keyof InvokeMap
@@ -353,6 +383,7 @@ export interface EventMap {
   'navigate': Route
   'schedules:changed': Schedule[]
   'rec:failed': { runId: string; errorKey: string }
+  'dev:log': LogEntry
 }
 export type EventChannel = keyof EventMap
 
@@ -432,7 +463,22 @@ export const INVOKE_CHANNELS = [
   'window:mini',
   'window:show-main',
   'engine:dispatch',
-  'engine:snapshot'
+  'engine:snapshot',
+  'dev:diagnostics',
+  'dev:metrics',
+  'dev:boot-flags',
+  'dev:logs',
+  'dev:storage',
+  'dev:read-data',
+  'dev:open-path',
+  'dev:set-binary',
+  'dev:probe',
+  'dev:test-tone',
+  'dev:clear-temp',
+  'dev:open-devtools',
+  'dev:reload',
+  'dev:relaunch',
+  'dev:crash-renderer'
 ] as const satisfies readonly InvokeChannel[]
 
 export const SEND_CHANNELS = [
@@ -459,7 +505,8 @@ export const EVENT_CHANNELS = [
   'shortcuts:status',
   'navigate',
   'schedules:changed',
-  'rec:failed'
+  'rec:failed',
+  'dev:log'
 ] as const satisfies readonly EventChannel[]
 
 // Compile-time checks that the whitelists above cover the whole contract.

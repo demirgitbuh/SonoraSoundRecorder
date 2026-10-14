@@ -8,7 +8,7 @@ import { invoke, on, send } from '../api'
 import { useApp } from '../stores/app'
 import { emptyRuntime, useEngine } from '../stores/engine'
 import { SessionController } from './session-controller'
-import type { ControllerHost } from './session-controller'
+import type { ControllerHost, SessionDiagnostics } from './session-controller'
 
 export const MAX_SESSIONS = 6
 
@@ -169,6 +169,17 @@ class Engine {
     if (!settings) return
     const sessions = settings.sessions.map((s) => (s.id === id ? { ...s, ...patch } : s))
     await useApp.getState().updateSettings({ sessions })
+  }
+
+  // ---------------------------------------------------------------------------- developer
+
+  diagnostics(): SessionDiagnostics[] {
+    return [...this.controllers.values()].map((c) => c.diagnostics())
+  }
+
+  /** Simulates an unplugged device on the selected session (developer tool). */
+  simulateSourceLoss(which: 'mic' | 'system'): boolean {
+    return this.selected()?.simulateSourceLoss(which) ?? false
   }
 
   // ---------------------------------------------------------------------------- snapshot

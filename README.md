@@ -38,6 +38,7 @@
 - **Tray & mini panel.** Closing the window keeps recordings running. Quitting with recordings open stops them safely without losing audio.
 - **Six languages, accessible UI.** English, Türkçe, Deutsch, Français, 中文 and Русский. Includes keyboard navigation, screen-reader announcements, high contrast, interface scaling and reduced motion.
 - **Updates from GitHub Releases.** Sonora shows the new version and its release notes, and nothing is installed without your consent. Recordings, settings and archive data are kept.
+- **Developer mode.** An optional page with a live log, process metrics, audio engine and whisper.cpp tuning, custom FFmpeg/whisper builds, Chromium switches, a key tester, an FFprobe inspector, test tones and fault injection. Off by default; turning it off restores the standard behavior. See [docs/DEVELOPER.md](docs/DEVELOPER.md).
 
 ## Download
 
@@ -105,6 +106,7 @@ See [docs/CI.md](docs/CI.md).
 | Local transcription models | [docs/TRANSCRIPTION.md](docs/TRANSCRIPTION.md) |
 | Updates & data protection | [docs/UPDATES.md](docs/UPDATES.md) |
 | GitHub Actions usage | [docs/CI.md](docs/CI.md) |
+| Developer mode | [docs/DEVELOPER.md](docs/DEVELOPER.md) |
 | What is tested automatically vs. manually | [docs/TESTING.md](docs/TESTING.md) |
 | Release notes | [docs/release-notes](docs/release-notes) |
 
@@ -117,6 +119,7 @@ See [docs/CI.md](docs/CI.md).
 - **Güvenlik:** Ses kayıt sırasında diske yazılır. Çökme sonrasında kayıt bir sonraki açılışta size sunulur ve hiçbir dosyanın üzerine yazılmaz.
 - **Yazıya çevirme:** Ayarlar → Yazıya çevirme bölümünden bir whisper.cpp GGML modeli (`ggml-*.bin`) seçin. Ses hiçbir servise gönderilmez.
 - **Güncellemeler:** Sonora, GitHub Releases'ta yeni bir sürüm bulduğunda size sorar. Kayıtlarınız ve ayarlarınız korunur.
+- **Geliştirici modu:** Ayarlar → Gelişmiş bölümünden açılır. Canlı günlük, süreç ölçümleri, ses motoru ve whisper.cpp ayarları, özel FFmpeg/whisper dosyaları, Chromium anahtarları ve test araçları sunar. Kapatıldığında standart davranış geri gelir.
 
 ## License
 

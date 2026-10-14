@@ -8,6 +8,7 @@ import type { AutostartStatus, SettingsImportPreview } from '../../../shared/ipc
 import { timestampName } from '../../../shared/naming'
 import { AppError, invoke } from '../api'
 import { Button, Field, Modal, Notice, Segmented, Select, Switch } from '../components/controls'
+import { defaultDeveloper } from '../../../shared/developer'
 import {
   Accessibility,
   Bell,
@@ -20,6 +21,7 @@ import {
   RefreshCw,
   RotateCcw,
   Settings,
+  Terminal,
   Wrench
 } from '../components/icons'
 import type { LucideIcon } from '../components/icons'
@@ -33,7 +35,10 @@ import { FormatEditor } from './RecordPanels'
 import { ShortcutEditor } from './ShortcutEditor'
 import { reportBulk } from './bulk'
 
-const CATEGORIES: Array<{ id: SettingsCategory; icon: LucideIcon; key: MessageKey }> = [
+/** Developer settings have their own page, so they are not a category here. */
+type PageCategory = Exclude<SettingsCategory, 'developer'>
+
+const CATEGORIES: Array<{ id: PageCategory; icon: LucideIcon; key: MessageKey }> = [
   { id: 'general', icon: Settings, key: 'settings.cat.general' },
   { id: 'recording', icon: Mic, key: 'settings.cat.recording' },
   { id: 'audio', icon: Cpu, key: 'settings.cat.audio' },
@@ -655,6 +660,70 @@ function ImportDialog({ preview, onClose }: { preview: SettingsImportPreview; on
   )
 }
 
+function DeveloperModeField() {
+  const t = useT()
+  const s = useApp((st) => st.settings)!
+  const update = useApp((st) => st.updateSettings)
+  const navigate = useApp((st) => st.navigate)
+  const [confirm, setConfirm] = useState(false)
+  // Values configured earlier are kept while developer mode is off.
+  const customized = JSON.stringify({ ...s.developer, enabled: false }) !== JSON.stringify(defaultDeveloper())
+  return (
+    <>
+      <Field
+        label={
+          <span className="row nowrap" style={{ gap: 8 }}>
+            <Terminal size={15} strokeWidth={1.6} aria-hidden="true" />
+            {t('settings.advanced.developerMode')}
+          </span>
+        }
+        description={
+          <>
+            {t('settings.advanced.developerModeDesc')}
+            {!s.developer.enabled && customized ? ` ${t('settings.advanced.developerModeKept')}` : ''}
+          </>
+        }
+      >
+        {s.developer.enabled && (
+          <Button size="sm" onClick={() => navigate('developer')}>
+            {t('settings.advanced.openDeveloper')}
+          </Button>
+        )}
+        <Switch
+          checked={s.developer.enabled}
+          label={t('settings.advanced.developerMode')}
+          onChange={(v) => {
+            if (v) setConfirm(true)
+            else void update({ developer: { enabled: false } })
+          }}
+        />
+      </Field>
+      <Modal
+        open={confirm}
+        title={t('settings.advanced.developerModeTitle')}
+        onClose={() => setConfirm(false)}
+        footer={
+          <>
+            <Button onClick={() => setConfirm(false)}>{t('common.cancel')}</Button>
+            <Button
+              variant="primary"
+              onClick={async () => {
+                setConfirm(false)
+                await update({ developer: { enabled: true } })
+                navigate('developer')
+              }}
+            >
+              {t('settings.advanced.developerModeEnable')}
+            </Button>
+          </>
+        }
+      >
+        <p>{t('settings.advanced.developerModeBody')}</p>
+      </Modal>
+    </>
+  )
+}
+
 function AdvancedSection() {
   const t = useT()
   const boot = useApp((st) => st.boot)!
@@ -755,6 +824,7 @@ function AdvancedSection() {
             {t('settings.advanced.openLogs')}
           </Button>
         </Field>
+        <DeveloperModeField />
         <Field label={t('settings.advanced.dataLocation')} description={t('settings.advanced.dataLocationDesc')}>
           <code className="code-chip truncate" title={boot.dataDir}>
             {boot.dataDir}
@@ -796,8 +866,8 @@ function AdvancedSection() {
 
 export function SettingsPage() {
   const t = useT()
-  const [cat, setCat] = useState<SettingsCategory>('general')
-  const body: Record<SettingsCategory, ReactNode> = {
+  const [cat, setCat] = useState<PageCategory>('general')
+  const body: Record<PageCategory, ReactNode> = {
     general: <GeneralSection />,
     recording: <RecordingSection />,
     audio: <AudioSection />,

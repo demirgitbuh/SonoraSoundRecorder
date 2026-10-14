@@ -46,8 +46,8 @@ All type checks, tests, builds and packages run on GitHub Actions. You do not ne
 ## Making a release
 
 ```bash
-git tag 0.1
-git push origin 0.1
+git tag 0.1.1
+git push origin 0.1.1
 ```
 
 The tag is used exactly as written. Bump `version` in `package.json` and add `docs/release-notes/<tag>.md` before tagging a new version.

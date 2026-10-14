@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir } from 'node:fs/promises'
-import { basename } from 'node:path'
+import { mkdir, rm } from 'node:fs/promises'
+import { cpus, totalmem } from 'node:os'
+import { basename, join } from 'node:path'
 import { BrowserWindow, ShareMenu, app, clipboard, dialog, ipcMain, shell } from 'electron'
 import type { IpcMainEvent, IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
@@ -10,13 +11,17 @@ import { SETTINGS_CATEGORIES, SettingsImportError, buildSettingsExport, mergeImp
 import { AUDIO_FORMATS, LOCALES, SHORTCUT_ACTIONS } from '../shared/types'
 import type { Schedule, TrackKind } from '../shared/types'
 import { scheduleSchema } from '../shared/library-schema'
+import { BINARY_KINDS, DATA_FILES, DEV_PATHS, chromiumBootFlags } from '../shared/developer'
+import type { BinaryInfo, BinaryKind, BootFlagsState, DevDiagnostics, DevMetrics, DevPathId } from '../shared/developer'
+import { sameBootFlags } from './services/boot-flags'
+import { checkBinary, clearTempDir, generateTestTone, readDataFile, storageReport } from './services/dev-tools'
 import { APP_ORIGIN, MAX_VIRTUAL_WAV_DATA } from './protocol'
 import { toLibraryError } from './services/audio-service'
 import { LibraryError } from './services/library-store'
 import { inspectModel } from './services/transcription'
 import { RUN_ID_PATTERN } from './services/run-store'
 import { isWritableDir, pathExists, freeSpace, writeFileAtomic } from './services/fs-utils'
-import { autostartStatus, openPermissionSettings, permissionStatus, requestMicrophone } from './services/platform'
+import { autostartStatus, detectInstallKind, isWayland, openPermissionSettings, permissionStatus, requestMicrophone } from './services/platform'
 import type { AppContext } from './context'
 
 const id = z.string().min(1).max(64)
@@ -84,14 +89,26 @@ export function registerIpc(ctx: AppContext): void {
         logger.warn('ipc', `rejected invalid arguments for ${channel}`)
         return { ok: false, errorKey: 'errors.invalidRequest', detail: null }
       }
+      const started = performance.now()
       try {
         const value = await fn(event, ...(parsed.data as InvokeArgs<C>))
+        trace(channel, started, null)
         return { ok: true, value }
       } catch (err) {
         if (!(err instanceof LibraryError)) logger.error('ipc', `${channel} failed`, err)
-        return envelopeError(err)
+        const envelope = envelopeError(err)
+        trace(channel, started, envelope.ok ? null : envelope.errorKey)
+        return envelope
       }
     })
+  }
+
+  /** Developer IPC trace. The developer page's own polling channels are left out. */
+  function trace(channel: string, started: number, errorKey: string | null): void {
+    const d = ctx.settings.value.developer
+    if (!d.enabled || !d.logging.ipcTrace || channel.startsWith('dev:')) return
+    const ms = Math.round((performance.now() - started) * 10) / 10
+    logger.info('ipc', `${channel} ${errorKey ? `failed (${errorKey})` : 'ok'} ${ms} ms`)
   }
 
   const progressTask = (labelKey: string): { taskId: string; report: (f: number) => void } => {
@@ -128,6 +145,11 @@ export function registerIpc(ctx: AppContext): void {
     if (p.transcription && 'modelPath' in p.transcription) {
       p.transcription = { ...p.transcription }
       delete p.transcription.modelPath
+    }
+    // Developer binary paths can only be changed through dev:set-binary, which checks the file.
+    if (p.developer && 'binaries' in p.developer) {
+      p.developer = { ...p.developer }
+      delete p.developer.binaries
     }
     const dir = p.files?.recordingsDir
     if (typeof dir === 'string') {
@@ -603,7 +625,7 @@ export function registerIpc(ctx: AppContext): void {
     ctx.tray.refresh()
     return res
   })
-  handle('window:show-main', z.tuple([z.enum(['record', 'archive', 'favorites', 'collections', 'trash', 'settings']).nullable()]), (_e, route) =>
+  handle('window:show-main', z.tuple([z.enum(['record', 'archive', 'favorites', 'collections', 'trash', 'settings', 'developer']).nullable()]), (_e, route) =>
     ctx.windows.showMain(route)
   )
   handle(
@@ -632,5 +654,205 @@ export function registerIpc(ctx: AppContext): void {
   })
   ipcMain.on('app:ready', (event) => {
     if (trusted(event)) ctx.onRendererReady(BrowserWindow.fromWebContents(event.sender))
+  })
+
+  // -------------------------------------------------------------------------- developer
+  // Every developer channel is refused unless developer mode is on.
+  const requireDev = (): void => {
+    if (!ctx.settings.value.developer.enabled) throw new LibraryError('dev.errorDisabled')
+  }
+  const userData = app.getPath('userData')
+  const binaryInfo = async (kind: BinaryKind): Promise<BinaryInfo> => {
+    const path = ctx.developer.binaryPath(kind)
+    const check = await checkBinary(kind, path)
+    return { kind, path, source: path === ctx.developer.bundledBinaries[kind] ? 'bundled' : 'custom', available: check.ok, version: check.version }
+  }
+  const devPath = (pathId: DevPathId): string => {
+    switch (pathId) {
+      case 'data':
+        return userData
+      case 'logs':
+        return ctx.logger.directory
+      case 'sessions':
+        return ctx.runs.baseDir
+      case 'temp':
+        return ctx.developer.tmpDir
+    }
+  }
+
+  const bootFlags = (): BootFlagsState => {
+    const configured = chromiumBootFlags(ctx.settings.value.developer, ctx.developer.platformFeatures)
+    return { applied: ctx.developer.appliedBoot, configured, restartRequired: !sameBootFlags(ctx.developer.appliedBoot, configured) }
+  }
+
+  handle('dev:boot-flags', z.tuple([]), () => {
+    requireDev()
+    return bootFlags()
+  })
+  handle('dev:diagnostics', z.tuple([]), async (): Promise<DevDiagnostics> => {
+    requireDev()
+    const gpu: Record<string, string> = {}
+    for (const [k, v] of Object.entries(app.getGPUFeatureStatus())) gpu[k] = String(v)
+    const cpuList = cpus()
+    return {
+      app: {
+        name: app.getName(),
+        version: app.getVersion(),
+        packaged: app.isPackaged,
+        installKind: detectInstallKind(),
+        locale: app.getLocale(),
+        uptimeSec: Math.round(process.uptime())
+      },
+      versions: { electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node, v8: process.versions.v8 },
+      os: {
+        platform: process.platform,
+        release: process.getSystemVersion(),
+        arch: process.arch,
+        wayland: isWayland(),
+        cpus: cpuList.length,
+        cpuModel: cpuList[0]?.model.trim() ?? '',
+        totalMemoryKB: Math.round(totalmem() / 1024)
+      },
+      paths: [
+        { id: 'data', path: userData },
+        { id: 'logs', path: ctx.logger.directory },
+        { id: 'sessions', path: ctx.runs.baseDir },
+        { id: 'temp', path: ctx.developer.tmpDir },
+        { id: 'recordings', path: ctx.settings.value.files.recordingsDir ?? '' },
+        { id: 'binaries', path: ctx.developer.binDir },
+        { id: 'executable', path: app.getPath('exe') },
+        { id: 'resources', path: process.resourcesPath }
+      ],
+      binaries: await Promise.all(BINARY_KINDS.map((k) => binaryInfo(k))),
+      gpu,
+      boot: bootFlags(),
+      runs: { active: ctx.runs.activeCount(), pending: (await ctx.runs.listPending()).length },
+      transcriptionJobs: ctx.transcription.activeCount()
+    }
+  })
+  handle('dev:metrics', z.tuple([]), (): DevMetrics => {
+    requireDev()
+    const processes = app.getAppMetrics().map((m) => ({
+      pid: m.pid,
+      type: String(m.type),
+      name: m.name ?? m.serviceName ?? null,
+      cpuPercent: Math.round(m.cpu.percentCPUUsage * 10) / 10,
+      memoryKB: m.memory.workingSetSize
+    }))
+    let systemMemory: DevMetrics['systemMemory'] = null
+    try {
+      const info = process.getSystemMemoryInfo()
+      systemMemory = { totalKB: info.total, freeKB: info.free }
+    } catch {
+      systemMemory = null
+    }
+    return { processes, systemMemory, uptimeSec: Math.round(process.uptime()) }
+  })
+  handle('dev:logs', z.tuple([]), () => {
+    requireDev()
+    return ctx.logger.recent()
+  })
+  handle('dev:storage', z.tuple([]), () => {
+    requireDev()
+    return storageReport([
+      ...DATA_FILES.map((name) => ({ id: name, path: join(userData, `${name}.json`) })),
+      { id: 'sessions', path: ctx.runs.baseDir },
+      { id: 'transcripts', path: join(userData, 'transcripts') },
+      { id: 'peaks', path: join(userData, 'peaks') },
+      { id: 'logs', path: ctx.logger.directory },
+      { id: 'temp', path: ctx.developer.tmpDir }
+    ])
+  })
+  handle('dev:read-data', z.tuple([z.enum(DATA_FILES)]), (_e, name) => {
+    requireDev()
+    return readDataFile(join(userData, `${name}.json`))
+  })
+  handle('dev:open-path', z.tuple([z.enum(DEV_PATHS)]), async (_e, pathId) => {
+    requireDev()
+    const dir = devPath(pathId)
+    await mkdir(dir, { recursive: true })
+    const err = await shell.openPath(dir)
+    if (err) throw new LibraryError('errors.openFailed', err)
+  })
+  handle('dev:set-binary', z.tuple([z.enum(BINARY_KINDS), z.boolean()]), async (event, kind, choose) => {
+    requireDev()
+    const binaries: Partial<Record<BinaryKind, string | null>> = {}
+    if (!choose) {
+      binaries[kind] = null
+      ctx.settings.update({ developer: { binaries } })
+      logger.info('dev', `${kind}: using the bundled executable`)
+      return binaryInfo(kind)
+    }
+    const res = await dialog.showOpenDialog(parentWindow(event)!, {
+      title: ctx.t('dev.binaries.chooseTitle', { name: kind === 'whisper' ? 'whisper-cli' : kind }),
+      defaultPath: ctx.developer.binaryPath(kind),
+      properties: ['openFile']
+    })
+    if (res.canceled || res.filePaths.length === 0) return null
+    const path = res.filePaths[0]!
+    const check = await checkBinary(kind, path)
+    if (!check.ok) throw new LibraryError('dev.binaries.invalid', path)
+    binaries[kind] = path
+    ctx.settings.update({ developer: { binaries } })
+    logger.info('dev', `${kind} override: ${path}${check.version ? ` (${check.version})` : ''}`)
+    return binaryInfo(kind)
+  })
+  handle(
+    'dev:probe',
+    z.tuple([z.discriminatedUnion('kind', [z.object({ kind: z.literal('file') }), z.object({ kind: z.literal('recording'), id })])]),
+    async (event, source) => {
+      requireDev()
+      let path: string
+      if (source.kind === 'file') {
+        const res = await dialog.showOpenDialog(parentWindow(event)!, { title: ctx.t('dev.probe.chooseTitle'), properties: ['openFile'] })
+        if (res.canceled || res.filePaths.length === 0) return null
+        path = res.filePaths[0]!
+      } else {
+        path = ctx.library.get(source.id).filePath
+      }
+      const raw = await ctx.ffmpeg.probeRaw(path)
+      let json = raw
+      try {
+        json = JSON.stringify(JSON.parse(raw), null, 2)
+      } catch {
+        // Show the raw output.
+      }
+      return { path, json: json.slice(0, 500_000) }
+    }
+  )
+  handle('dev:test-tone', z.tuple([z.number().min(20).max(20000), z.number().int().min(1).max(600)]), async (_e, frequencyHz, seconds) => {
+    requireDev()
+    const file = await generateTestTone(ctx.ffmpeg, join(ctx.developer.tmpDir, 'test-tones'), frequencyHz, seconds)
+    try {
+      return await ctx.audio.importFiles([file])
+    } finally {
+      await rm(file, { force: true }).catch(() => undefined)
+    }
+  })
+  handle('dev:clear-temp', z.tuple([]), async () => {
+    requireDev()
+    const res = await clearTempDir(ctx.developer.tmpDir, ctx.transcription.activeWorkDirs())
+    logger.info('dev', `temporary files: ${res.removed} removed (${res.bytes} bytes), ${res.skipped} kept`)
+    return res
+  })
+  handle('dev:open-devtools', z.tuple([z.enum(['main', 'mini'])]), (_e, target) => {
+    requireDev()
+    return ctx.windows.openDevTools(target)
+  })
+  handle('dev:reload', z.tuple([]), () => {
+    requireDev()
+    // A reload would drop the audio graph of running recordings.
+    if (ctx.runs.activeCount() > 0) throw new LibraryError('dev.errorRecording')
+    logger.info('dev', 'reloading the main window')
+    ctx.windows.reloadMain()
+  })
+  handle('dev:relaunch', z.tuple([]), () => {
+    requireDev()
+    void ctx.requestRelaunch()
+  })
+  handle('dev:crash-renderer', z.tuple([]), () => {
+    requireDev()
+    logger.warn('dev', 'crashing the main window renderer on request (crash recovery test)')
+    setTimeout(() => ctx.windows.crashMain(), 150)
   })
 }

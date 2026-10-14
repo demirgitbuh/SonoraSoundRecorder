@@ -19,6 +19,10 @@ interface Deps {
   onHidden: () => void
   onFocusChange: (anyFocused: boolean) => void
   isQuitting: () => boolean
+  /** True when the developer DevTools shortcut (F12, Ctrl/Cmd+Shift+I) is active. */
+  devToolsShortcut: () => boolean
+  /** Called after the recorder window crashed, before it is reloaded. */
+  onMainRendererGone: () => Promise<void>
 }
 
 function rendererUrl(kind: 'main' | 'mini'): string {
@@ -47,6 +51,31 @@ export class WindowManager {
     })
     win.on('focus', () => this.focusChanged())
     win.on('blur', () => this.focusChanged())
+    win.webContents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown' || !this.deps.devToolsShortcut()) return
+      const mod = process.platform === 'darwin' ? input.meta && input.alt : input.control && input.shift
+      if (input.key === 'F12' || (mod && input.key.toLowerCase() === 'i')) {
+        event.preventDefault()
+        win.webContents.toggleDevTools()
+      }
+    })
+  }
+
+  /** Opens the developer tools of a window in a separate window. */
+  openDevTools(target: 'main' | 'mini'): boolean {
+    const win = target === 'main' ? this.main : this.mini
+    if (!win || win.isDestroyed()) return false
+    win.webContents.openDevTools({ mode: 'detach' })
+    return true
+  }
+
+  reloadMain(): void {
+    if (this.main && !this.main.isDestroyed()) this.main.webContents.reloadIgnoringCache()
+  }
+
+  /** Crashes the recorder renderer on purpose to test crash recovery (developer tool). */
+  crashMain(): void {
+    if (this.main && !this.main.isDestroyed()) this.main.webContents.forcefullyCrashRenderer()
   }
 
   private focusChanged(): void {
@@ -118,7 +147,14 @@ export class WindowManager {
     win.on('move', scheduleBounds)
     win.webContents.on('render-process-gone', (_e, details) => {
       this.deps.logger.error('window', `renderer gone: ${details.reason} (${details.exitCode})`)
-      if (details.reason !== 'clean-exit' && !win.isDestroyed()) win.reload()
+      if (details.reason === 'clean-exit') return
+      // Runs that were recording are closed first, so the reloaded window offers them for recovery.
+      void this.deps
+        .onMainRendererGone()
+        .catch((err) => this.deps.logger.error('window', 'cleanup after renderer crash failed', err))
+        .finally(() => {
+          if (!win.isDestroyed()) win.reload()
+        })
     })
     void win.loadURL(rendererUrl('main'))
     this.main = win
@@ -195,6 +231,10 @@ export class WindowManager {
     })
     mini.on('closed', () => {
       if (this.mini === mini) this.mini = null
+    })
+    mini.webContents.on('render-process-gone', (_e, details) => {
+      this.deps.logger.warn('window', `mini panel renderer gone: ${details.reason}`)
+      if (details.reason !== 'clean-exit' && !mini.isDestroyed()) mini.reload()
     })
     void mini.loadURL(rendererUrl('mini'))
     this.mini = mini

@@ -6,10 +6,16 @@ import { net, shell } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import type { ReleaseInfo, UpdateStatus } from '../../shared/ipc'
 import type { InstallKind } from '../../shared/types'
-import { isNewer, normalizeVersion } from '../../shared/version'
+import { compareVersions, isNewer, normalizeVersion } from '../../shared/version'
 import type { Logger } from './logger'
 import { pickAsset, supportsAutoInstall } from './update-utils'
 import type { GithubAsset } from './update-utils'
+
+class HttpError extends Error {
+  constructor(readonly status: number) {
+    super(`HTTP ${status}`)
+  }
+}
 
 export const REPO_OWNER = 'demirgitbuh'
 export const REPO_NAME = 'SonoraSoundRecorder'
@@ -36,6 +42,8 @@ interface Deps {
   isBusy: () => boolean
   /** Flushes settings and archive before the app quits for an update. */
   beforeInstall: () => Promise<void>
+  /** Also offers pre-releases (developer option). */
+  allowPrerelease?: () => boolean
   emit: (status: UpdateStatus) => void
 }
 
@@ -81,21 +89,47 @@ export class UpdateService {
     return this.set({ phase: 'error', errorKey, errorDetail: detail, progress: null })
   }
 
+  /**
+   * Pre-releases are installed through the downloaded package, because the self-updating
+   * installers only follow stable releases.
+   */
+  private usesAutoUpdater(version: string | null | undefined): boolean {
+    return supportsAutoInstall(this.deps.installKind) && !!version && !version.includes('-')
+  }
+
+  private async fetchRelease(): Promise<GithubRelease | null> {
+    const headers = {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': `SonoraSoundRecorder/${this.deps.currentVersion}`
+    }
+    if (!this.deps.allowPrerelease?.()) {
+      const res = await net.fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`, { headers })
+      if (res.status === 404) return null
+      if (!res.ok) throw new HttpError(res.status)
+      return (await res.json()) as GithubRelease
+    }
+    const res = await net.fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=30`, { headers })
+    if (res.status === 404) return null
+    if (!res.ok) throw new HttpError(res.status)
+    const list = ((await res.json()) as GithubRelease[]).filter((r) => !r.draft && normalizeVersion(r.tag_name))
+    list.sort((a, b) => compareVersions(normalizeVersion(b.tag_name)!, normalizeVersion(a.tag_name)!))
+    return list[0] ?? null
+  }
+
   async check(): Promise<UpdateStatus> {
     if (this.status.phase === 'checking' || this.status.phase === 'downloading' || this.status.phase === 'installing') return this.status
     this.set({ phase: 'checking', errorKey: null, errorDetail: null })
     try {
-      const res = await net.fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`, {
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'User-Agent': `SonoraSoundRecorder/${this.deps.currentVersion}`
-        }
-      })
-      if (res.status === 404) {
+      let data: GithubRelease | null
+      try {
+        data = await this.fetchRelease()
+      } catch (err) {
+        if (err instanceof HttpError) return this.fail('updates.errorHttp', `HTTP ${err.status}`)
+        throw err
+      }
+      if (!data) {
         return this.set({ phase: 'not-available', release: null, checkedAt: new Date().toISOString() })
       }
-      if (!res.ok) return this.fail('updates.errorHttp', `HTTP ${res.status}`)
-      const data = (await res.json()) as GithubRelease
       const version = normalizeVersion(data.tag_name)
       if (!version) return this.fail('updates.errorBadTag', data.tag_name)
       const release: ReleaseInfo = {
@@ -112,6 +146,7 @@ export class UpdateService {
       return this.set({
         phase: newer ? 'available' : 'not-available',
         release,
+        autoInstall: this.usesAutoUpdater(version),
         checkedAt: new Date().toISOString(),
         downloadedFile: null,
         progress: null
@@ -147,7 +182,7 @@ export class UpdateService {
     if (this.status.phase === 'downloading') return this.status
     this.set({ phase: 'downloading', progress: { percent: 0, transferred: 0, total: 0 }, installAfterDownload: installAfter, errorKey: null, errorDetail: null })
     try {
-      if (supportsAutoInstall(this.deps.installKind)) {
+      if (this.usesAutoUpdater(release.version)) {
         this.wireAutoUpdater()
         const result = await autoUpdater.checkForUpdates()
         const found = result?.updateInfo?.version
@@ -217,7 +252,7 @@ export class UpdateService {
       this.deps.logger.info('update', 'install deferred until recordings finish')
       return this.set({ phase: 'waiting-for-idle', installAfterDownload: true })
     }
-    if (supportsAutoInstall(this.deps.installKind)) {
+    if (this.usesAutoUpdater(this.status.release?.version)) {
       this.set({ phase: 'installing' })
       await this.deps.beforeInstall()
       this.deps.logger.info('update', `installing ${this.status.release?.version}`)

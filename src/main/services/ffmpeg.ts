@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { basename } from 'node:path'
 import type { AudioFormat } from '../../shared/types'
+import { formatCommand } from '../../shared/developer'
 import type { Logger } from './logger'
 
 export interface ProbeStream {
@@ -49,16 +51,42 @@ export interface RunOptions {
   logLevel?: 'error' | 'info'
 }
 
-/** Wrapper around the bundled ffmpeg and ffprobe executables. */
+/** Wrapper around the bundled ffmpeg and ffprobe executables (or developer-selected ones). */
 export class Ffmpeg {
+  /** Writes every command line, exit code and duration to the log (developer option). */
+  logCommands = false
+
   constructor(
-    readonly ffmpegPath: string,
-    readonly ffprobePath: string,
+    private ffmpegExe: string,
+    private ffprobeExe: string,
     private readonly logger: Logger
   ) {}
 
+  get ffmpegPath(): string {
+    return this.ffmpegExe
+  }
+
+  get ffprobePath(): string {
+    return this.ffprobeExe
+  }
+
+  /** Switches to other executables; used for developer binary overrides. */
+  setPaths(ffmpegPath: string, ffprobePath: string): void {
+    this.ffmpegExe = ffmpegPath
+    this.ffprobeExe = ffprobePath
+  }
+
   get available(): boolean {
     return existsSync(this.ffmpegPath) && existsSync(this.ffprobePath)
+  }
+
+  private logCommand(exe: string, args: string[]): number {
+    if (this.logCommands) this.logger.info('ffmpeg-cmd', formatCommand(exe, args))
+    return Date.now()
+  }
+
+  private logExit(exe: string, code: number | null, started: number): void {
+    if (this.logCommands) this.logger.info('ffmpeg-cmd', `${basename(exe)} exited with ${code} after ${Date.now() - started} ms`)
   }
 
   run(args: string[], opts: RunOptions = {}): Promise<void> {
@@ -69,6 +97,7 @@ export class Ffmpeg {
       }
       const withProgress = opts.onProgress && opts.totalMs ? ['-progress', 'pipe:2', '-nostats'] : ['-nostats']
       const fullArgs = ['-hide_banner', '-loglevel', opts.logLevel ?? 'error', ...withProgress, ...args]
+      const started = this.logCommand(this.ffmpegPath, fullArgs)
       const child = spawn(this.ffmpegPath, fullArgs, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
       let stderrTail = ''
       let settled = false
@@ -103,6 +132,7 @@ export class Ffmpeg {
       child.on('close', (code) => {
         if (settled) return
         settled = true
+        this.logExit(this.ffmpegPath, code, started)
         if (partial) {
           opts.onStderrLine?.(partial)
           stderrTail = `${stderrTail}\n${partial}`.slice(-2000)
@@ -121,9 +151,20 @@ export class Ffmpeg {
     })
   }
 
-  probe(file: string): Promise<ProbeResult> {
+  async probe(file: string): Promise<ProbeResult> {
+    const out = await this.probeRaw(file)
+    try {
+      return parseProbe(JSON.parse(out))
+    } catch (e) {
+      throw new FfmpegError(`could not parse ffprobe output: ${(e as Error).message}`, '')
+    }
+  }
+
+  /** Raw `ffprobe -show_format -show_streams` JSON text. */
+  probeRaw(file: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const args = ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file]
+      const started = this.logCommand(this.ffprobePath, args)
       const child = spawn(this.ffprobePath, args, { windowsHide: true })
       let out = ''
       let err = ''
@@ -137,15 +178,12 @@ export class Ffmpeg {
       })
       child.on('error', (e) => reject(new FfmpegError(e.message, err)))
       child.on('close', (code) => {
+        this.logExit(this.ffprobePath, code, started)
         if (code !== 0) {
           reject(new FfmpegError(`ffprobe exited with code ${code}`, err))
           return
         }
-        try {
-          resolve(parseProbe(JSON.parse(out)))
-        } catch (e) {
-          reject(new FfmpegError(`could not parse ffprobe output: ${(e as Error).message}`, err))
-        }
+        resolve(out)
       })
     })
   }

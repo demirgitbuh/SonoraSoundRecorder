@@ -132,6 +132,7 @@ export function DetailPanel({ rec }: { rec: Recording }) {
   const tags = useLibrary((s) => s.tags)
   const folders = useLibrary((s) => s.folders)
   const setActive = useLibrary((s) => s.setActive)
+  const showIds = useApp((s) => !!s.settings?.developer.enabled && !!s.settings?.developer.ui.showInternalIds)
   const [note, setNote] = useState(rec.note)
   const [newTag, setNewTag] = useState('')
   const [exportOpen, setExportOpen] = useState(false)
@@ -249,6 +250,22 @@ export function DetailPanel({ rec }: { rec: Recording }) {
             <dt>{t('detail.importedFrom')}</dt>
             <dd className="truncate" title={rec.imported.originalPath}>
               {rec.imported.originalPath}
+            </dd>
+          </div>
+        )}
+        {showIds && (
+          <div>
+            <dt>{t('dev.ids.recording')}</dt>
+            <dd>
+              <code className="dev-mono dev-id">{rec.id}</code>
+            </dd>
+          </div>
+        )}
+        {showIds && rec.groupId && (
+          <div>
+            <dt>{t('dev.ids.group')}</dt>
+            <dd>
+              <code className="dev-mono dev-id">{rec.groupId}</code>
             </dd>
           </div>
         )}

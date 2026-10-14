@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { availableParallelism } from 'node:os'
 import { basename, join } from 'node:path'
 import type { TranscribeProgress } from '../../shared/ipc'
+import { formatCommand } from '../../shared/developer'
 import type { ModelInfo, Transcript, TranscriptSegment } from '../../shared/types'
 import type { Ffmpeg } from './ffmpeg'
 import { LibraryError } from './library-store'
@@ -95,7 +96,8 @@ interface Job {
 }
 
 interface Deps {
-  whisperPath: string
+  /** Bundled whisper-cli, or a developer-selected one. */
+  whisperPath: () => string
   ffmpeg: Ffmpeg
   library: LibraryStore
   logger: Logger
@@ -103,6 +105,12 @@ interface Deps {
   modelPath: () => string | null
   language: () => string
   threads: () => number
+  /** Advanced whisper-cli options from developer mode. */
+  extraArgs?: () => string[]
+  /** Keeps the converted audio and raw output for inspection (developer option). */
+  keepTempFiles?: () => boolean
+  /** Logs the whisper-cli command line (developer option). */
+  logCommands?: () => boolean
   emit: (p: TranscribeProgress) => void
 }
 
@@ -118,7 +126,19 @@ export class TranscriptionService {
   constructor(private readonly deps: Deps) {}
 
   get available(): boolean {
-    return existsSync(this.deps.whisperPath)
+    return existsSync(this.deps.whisperPath())
+  }
+
+  /** Number of queued or running jobs. */
+  activeCount(): number {
+    return [...this.jobs.values()].filter((j) => !['done', 'error', 'cancelled'].includes(j.progress.phase)).length
+  }
+
+  /** Work directories of jobs that are still queued or running. */
+  activeWorkDirs(): string[] {
+    return [...this.jobs.values()]
+      .filter((j) => !['done', 'error', 'cancelled'].includes(j.progress.phase))
+      .map((j) => join(this.deps.tmpDir, `transcribe-${j.id}`))
   }
 
   list(): TranscribeProgress[] {
@@ -210,7 +230,21 @@ export class TranscriptionService {
       this.update(job, { phase: 'transcribing', percent: 10 })
       const outBase = join(workDir, 'result')
       const threads = this.deps.threads() || Math.max(1, Math.min(8, availableParallelism() - 1))
-      const args = ['-m', modelPath, '-f', wav, '-l', this.deps.language() || 'auto', '-t', String(threads), '-oj', '-of', outBase, '-pp']
+      const args = [
+        '-m',
+        modelPath,
+        '-f',
+        wav,
+        '-l',
+        this.deps.language() || 'auto',
+        '-t',
+        String(threads),
+        '-oj',
+        '-of',
+        outBase,
+        '-pp',
+        ...(this.deps.extraArgs?.() ?? [])
+      ]
       await this.runWhisper(job, args)
       if (job.cancelled) throw new LibraryError('errors.cancelled')
       this.update(job, { phase: 'saving', percent: 98 })
@@ -243,13 +277,17 @@ export class TranscriptionService {
         logger.error('transcribe', `job ${job.id} failed (${key})`, detail ?? undefined)
       }
     } finally {
-      await rm(workDir, { recursive: true, force: true }).catch(() => undefined)
+      if (this.deps.keepTempFiles?.()) logger.info('transcribe', `kept work files of job ${job.id} in ${workDir}`)
+      else await rm(workDir, { recursive: true, force: true }).catch(() => undefined)
     }
   }
 
   private runWhisper(job: Job, args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
-      const child = spawn(this.deps.whisperPath, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] })
+      const exe = this.deps.whisperPath()
+      if (this.deps.logCommands?.()) this.deps.logger.info('whisper-cmd', formatCommand(exe, args))
+      const started = Date.now()
+      const child = spawn(exe, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] })
       job.child = child
       let errorLines: string[] = []
       let partial = ''
@@ -270,6 +308,7 @@ export class TranscriptionService {
       child.on('error', (err) => reject(new LibraryError('transcription.errorEngineStart', err.message)))
       child.on('close', (code) => {
         job.child = null
+        if (this.deps.logCommands?.()) this.deps.logger.info('whisper-cmd', `whisper-cli exited with ${code} after ${Date.now() - started} ms`)
         if (job.cancelled) reject(new LibraryError('errors.cancelled'))
         else if (code === 0) resolve()
         else reject(new LibraryError('transcription.errorFailed', errorLines.join(' | ') || `exit code ${code}`))

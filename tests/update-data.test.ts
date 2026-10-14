@@ -76,8 +76,8 @@ describe('packaging keeps user data safe across updates', () => {
     expect(builder).toMatch(/from: vendor\/bin\/\$\{os\}-\$\{arch\}/)
   })
 
-  it('ships version 0.1.0 under GPL-3.0', () => {
-    expect(pkg.version).toBe('0.1.0')
+  it('ships version 0.1.1 under GPL-3.0', () => {
+    expect(pkg.version).toBe('0.1.1')
     expect(pkg.license).toBe('GPL-3.0-only')
     expect(readFileSync(join(__dirname, '..', 'LICENSE'), 'utf8')).toContain('GNU GENERAL PUBLIC LICENSE')
   })

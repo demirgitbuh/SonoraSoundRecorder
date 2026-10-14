@@ -8,6 +8,7 @@
  * While recording, interleaved float32 frames are posted to the main thread in chunks for each
  * requested track (mic, system, mix). Meter values (peak, RMS, clipping) and waveform points are
  * always posted so levels can be checked before and during recording. Paused time is not counted.
+ * The chunk size, meter rate and clip threshold can be changed in developer mode.
  */
 const CLIP_LEVEL = 0.999
 
@@ -20,7 +21,9 @@ class SonoraCaptureProcessor extends AudioWorkletProcessor {
     this.hasSystem = !!o.hasSystem
     this.emit = { mic: !!(o.emit && o.emit.mic), system: !!(o.emit && o.emit.system), mix: !!(o.emit && o.emit.mix) }
     this.chunkFrames = o.chunkFrames || 4096
-    this.meterEvery = Math.max(128, Math.round(sampleRate / 30))
+    const meterHz = o.meterHz >= 1 && o.meterHz <= 120 ? o.meterHz : 30
+    this.meterEvery = Math.max(128, Math.round(sampleRate / meterHz))
+    this.clipLevel = o.clipLevel > 0 && o.clipLevel <= 1 ? o.clipLevel : CLIP_LEVEL
     this.waveEvery = Math.max(64, Math.round(sampleRate / 60))
     this.recording = false
     this.stopped = false
@@ -89,6 +92,7 @@ class SonoraCaptureProcessor extends AudioWorkletProcessor {
     if (sysOk) this.seen.system = true
     const n = (micOk && micIn[0].length) || (sysOk && sysIn[0].length) || 128
     const m = this.m
+    const clip = this.clipLevel
 
     for (let f = 0; f < n; f++) {
       let frameMax = 0
@@ -102,9 +106,9 @@ class SonoraCaptureProcessor extends AudioWorkletProcessor {
         if (aa > m.mic.peak) m.mic.peak = aa
         if (bb > m.system.peak) m.system.peak = bb
         if (xx > m.mix.peak) m.mix.peak = xx
-        if (aa >= CLIP_LEVEL) m.mic.clip = true
-        if (bb >= CLIP_LEVEL) m.system.clip = true
-        if (xx >= CLIP_LEVEL) m.mix.clip = true
+        if (aa >= clip) m.mic.clip = true
+        if (bb >= clip) m.system.clip = true
+        if (xx >= clip) m.mix.clip = true
         m.mic.sum += a * a
         m.system.sum += b * b
         m.mix.sum += x * x

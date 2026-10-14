@@ -18,6 +18,7 @@
 | All six languages: same keys, same placeholders, no empty text, every key used in code exists | `tests/i18n.test.ts` |
 | Shortcut parsing, conflicts, global registration, focus handling, suspension, cleanup | `tests/shortcuts.test.ts` |
 | User data kept across an update; installer/update configuration | `tests/update-data.test.ts` |
+| Developer settings (defaults, field-by-field fallback, no effect while off, reset, never imported paths/switches), Chromium start-up switches, whisper arguments, command quoting, log level filter and live log buffer, recovery of runs from a crashed recorder window, storage report and temporary-file cleanup, executable checks | `tests/developer.test.ts` |
 | Real encodes of WAV, FLAC (24-bit), MP3, OGG Opus and M4A AAC; trims; separate tracks; normalization; content-based import; copy/replace edits; export without overwriting | `tests/ffmpeg-integration.test.ts` (bundled FFmpeg) |
 | Required binaries inside every package, binaries run, CPU architecture, DMG/AppImage/DEB contents, update metadata, transcription smoke test | `scripts/verify-package.mjs` on each packaging runner |
 
@@ -34,6 +35,8 @@ CI machines have no microphone, no sound output, no interactive desktop session 
 | Global shortcuts | With another app focused, press K / Space / L; check the status shown in Settings → Shortcuts. |
 | Text fields don't trigger shortcuts | Type "k" and a space in the archive search box while a session is selected; nothing starts. |
 | Tray & mini panel | Close the window during a recording; recording continues; control it from the tray and the mini panel. |
+| Shortcuts in the mini panel | Click a button in the mini panel so it has focus, then press K, Space and L; the selected session starts/stops, pauses/resumes and gets a marker. Repeat with *Only in Sonora*. |
+| Developer mode | Turn it on in Settings → Advanced; the Developer page opens. Check the live log, process list, a simulated microphone disconnect while recording (pause → reconnect → resume), a test tone import, and the crash test (the recording is offered as recovered). Turn it off; the sidebar entry disappears. |
 | Quit with open recordings | Quit from the tray while recording; confirm; restart; the recording is offered under *Unsaved recordings*. |
 | Crash recovery | Kill the process while recording (Task Manager / `kill -9`); restart; the recording is offered as *Recovered*. |
 | Native share (macOS) | Detail panel → Share opens the macOS share sheet. |

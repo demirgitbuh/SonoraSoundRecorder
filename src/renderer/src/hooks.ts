@@ -1,23 +1,28 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { SHORTCUT_ACTIONS } from '../../shared/types'
+import type { ShortcutAction } from '../../shared/types'
 import { eventMatches, parseAccelerator } from '../../shared/shortcuts'
 import { platform, setZoomFactor } from './api'
-import { engine } from './audio/engine'
 import { useApp } from './stores/app'
 
 const KEY_OPERATED = 'button, [role="button"], [role="switch"], [role="radio"], [role="tab"], [role="checkbox"], [role="slider"], [role="option"], a, summary'
 
 /**
- * In-app handling of the recording shortcuts. Text fields, dialogs, the shortcut recorder and
- * local key areas (the waveform editor) never trigger recording commands. Space/Enter keep their
- * normal meaning on a control that was focused with the keyboard.
+ * In-app handling of the recording shortcuts, used by the main window and the mini panel (global
+ * shortcuts are released while any Sonora window has focus). Text fields, dialogs, the shortcut
+ * recorder and local key areas (the waveform editor) never trigger recording commands. Space/Enter
+ * keep their normal meaning on a control that was focused with the keyboard.
  */
-export function useInAppShortcuts(): void {
+export function useInAppShortcuts(onAction: (action: ShortcutAction) => void): void {
+  const actionRef = useRef(onAction)
+  actionRef.current = onAction
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
       const st = useApp.getState()
       const s = st.settings
       if (!s || !s.onboardingCompleted || st.shortcutCapture || e.repeat || e.defaultPrevented) return
+      // While a new key combination is being recorded (in any window) shortcuts are suspended.
+      if (st.shortcutStatus.some((x) => x.state === 'suspended')) return
       const target = e.target instanceof HTMLElement ? e.target : null
       if (target) {
         if (target.closest('[data-shortcut-scope="local"]')) return
@@ -31,7 +36,7 @@ export function useInAppShortcuts(): void {
         const key = parseAccelerator(acc)?.key
         if ((key === 'Space' || key === 'Enter') && target && target.matches(':focus-visible') && target.closest(KEY_OPERATED)) return
         e.preventDefault()
-        void engine.handle({ action, origin: 'shortcut' })
+        actionRef.current(action)
         return
       }
     }

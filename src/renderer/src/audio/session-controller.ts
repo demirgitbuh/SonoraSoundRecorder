@@ -3,6 +3,7 @@ import { resolveEncoding } from '../../../shared/formats'
 import { shouldPlayCue } from '../../../shared/notify-policy'
 import type { RunInit } from '../../../shared/ipc'
 import type { Settings } from '../../../shared/settings'
+import { dbToLinear, effectiveDeveloper } from '../../../shared/developer'
 import type { EncodingOptions, Marker, MicProcessing, PlatformCapabilities, SessionConfig, ToastKind, TrackKind } from '../../../shared/types'
 import { AppError, invoke, log, send } from '../api'
 import type { CaptureInfo, SessionRuntime } from '../stores/engine'
@@ -15,7 +16,6 @@ import type { LiveData } from './live'
 
 const WORKLET_URL = (): string => new URL('worklets/capture-processor.js', document.baseURI).href
 const MIN_FREE_BYTES = 200 * 1024 * 1024
-const DATA_TIMEOUT_MS = 4000
 
 export interface ControllerHost {
   settings: () => Settings
@@ -43,9 +43,16 @@ class ChunkSender {
   private pending = new Map<TrackKind, Float32Array[]>()
   private bytes = 0
   private readonly timer: number
+  /** Totals for the developer page. */
+  sentBytes = 0
+  sentMessages = 0
+  lastSentAt = 0
 
-  constructor(private readonly runId: string) {
-    this.timer = window.setInterval(() => this.flush(), 250)
+  constructor(
+    private readonly runId: string,
+    intervalMs: number
+  ) {
+    this.timer = window.setInterval(() => this.flush(), intervalMs)
   }
 
   push(track: TrackKind, data: Float32Array): void {
@@ -71,6 +78,9 @@ class ChunkSender {
       }
       list.length = 0
       send('rec:chunk', this.runId, track, merged.buffer)
+      this.sentBytes += merged.byteLength
+      this.sentMessages++
+      this.lastSentAt = Date.now()
     }
     this.bytes = 0
   }
@@ -79,6 +89,23 @@ class ChunkSender {
     window.clearInterval(this.timer)
     this.flush()
   }
+}
+
+/** Live technical state of one session, shown on the developer page. */
+export interface SessionDiagnostics {
+  id: string
+  state: string
+  runId: string | null
+  context: { state: string; sampleRate: number; baseLatency: number | null; outputLatency: number | null } | null
+  latencyHint: string | null
+  chunkFrames: number | null
+  tracks: TrackKind[]
+  framesCaptured: number
+  sentBytes: number
+  sentMessages: number
+  lastSentAt: number | null
+  testMode: boolean
+  sources: { mic: string | null; system: string | null }
 }
 
 interface WorkletMeter {
@@ -123,6 +150,7 @@ export class SessionController {
   private testMode = false
   private quitting = false
   private capture: CaptureInfo | null = null
+  private graphOptions: { latencyHint: string; chunkFrames: number } | null = null
 
   constructor(
     readonly id: string,
@@ -175,10 +203,13 @@ export class SessionController {
     if (wantSys && this.host.caps().systemAudio.status === 'unsupported') throw new CaptureError('capture.errorSystemUnsupportedOs')
     this.encoding = encoding
     this.tracks = tracksFor(cfg)
+    // Developer options apply to the next graph (next recording or input check).
+    const dev = effectiveDeveloper(this.host.settings().developer).audio
     try {
       if (wantMic) this.mic = await openMicrophone(cfg.micDeviceId, encoding.sampleRate, this.processingRequest())
       if (wantSys) this.sys = await openSystemAudio(cfg.systemDeviceId)
-      const ctx = new AudioContext({ sampleRate: encoding.sampleRate, latencyHint: 'interactive' })
+      const ctx = new AudioContext({ sampleRate: encoding.sampleRate, latencyHint: dev.latencyHint })
+      this.graphOptions = { latencyHint: dev.latencyHint, chunkFrames: dev.chunkFrames }
       this.ctx = ctx
       await ctx.audioWorklet.addModule(WORKLET_URL())
       const worklet = new AudioWorkletNode(ctx, 'sonora-capture', {
@@ -193,7 +224,9 @@ export class SessionController {
           hasMic: wantMic,
           hasSystem: wantSys,
           emit: { mic: this.tracks.includes('mic'), system: this.tracks.includes('system'), mix: this.tracks.includes('mix') },
-          chunkFrames: 4096
+          chunkFrames: dev.chunkFrames,
+          meterHz: dev.meterHz,
+          clipLevel: dbToLinear(dev.clipThresholdDb)
         }
       })
       this.worklet = worklet
@@ -274,6 +307,7 @@ export class SessionController {
     this.sysGain = null
     this.monitorGain = null
     this.sink = null
+    this.graphOptions = null
     this.live.decay()
   }
 
@@ -403,7 +437,8 @@ export class SessionController {
         await invoke('rec:begin', init)
         runBegun = true
         this.runId = runId
-        this.sender = new ChunkSender(runId)
+        const dev = effectiveDeveloper(settings.developer).audio
+        this.sender = new ChunkSender(runId, dev.sendIntervalMs)
         this.frames = 0
         this.markers = []
         this.live.reset()
@@ -411,7 +446,7 @@ export class SessionController {
           const timer = window.setTimeout(() => {
             this.dataWaiter = null
             resolve(false)
-          }, DATA_TIMEOUT_MS)
+          }, dev.dataTimeoutMs)
           this.dataWaiter = () => {
             window.clearTimeout(timer)
             resolve(true)
@@ -705,6 +740,44 @@ export class SessionController {
         this.host.notify('error', 'notify.reconnectFailed', { bodyKey: key })
       }
     })
+  }
+
+  /**
+   * Developer tool: behaves exactly as if the device had been unplugged, so the pause and
+   * reconnect path can be tested without touching hardware. Returns false when not applicable.
+   */
+  simulateSourceLoss(which: 'mic' | 'system'): boolean {
+    const src = which === 'mic' ? this.mic : this.sys
+    if (!src || (this.state !== 'recording' && this.state !== 'paused')) return false
+    log('warn', 'session', `simulated ${which} disconnect (developer tool)`)
+    this.onSourceEnded(which, src)
+    return true
+  }
+
+  diagnostics(): SessionDiagnostics {
+    const ctx = this.ctx
+    return {
+      id: this.id,
+      state: this.state,
+      runId: this.runId,
+      context: ctx
+        ? {
+            state: ctx.state,
+            sampleRate: ctx.sampleRate,
+            baseLatency: Number.isFinite(ctx.baseLatency) ? ctx.baseLatency : null,
+            outputLatency: Number.isFinite(ctx.outputLatency) ? ctx.outputLatency : null
+          }
+        : null,
+      latencyHint: this.graphOptions?.latencyHint ?? null,
+      chunkFrames: this.graphOptions?.chunkFrames ?? null,
+      tracks: [...this.tracks],
+      framesCaptured: this.frames,
+      sentBytes: this.sender?.sentBytes ?? 0,
+      sentMessages: this.sender?.sentMessages ?? 0,
+      lastSentAt: this.sender?.lastSentAt || null,
+      testMode: this.testMode,
+      sources: { mic: this.mic?.info.label ?? null, system: this.sys?.info.label ?? null }
+    }
   }
 
   /** Called when the main process could not write the run to disk (disk full...). */

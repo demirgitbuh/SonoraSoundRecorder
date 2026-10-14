@@ -75,6 +75,8 @@ interface ActiveRun {
 export interface RunStoreOptions {
   /** Called once when writing to disk fails (disk full, device removed...). */
   onWriteError?: (runId: string, err: Error) => void
+  /** How often audio is forced to disk, read when a run begins (developer option). */
+  syncIntervalMs?: () => number
 }
 
 /**
@@ -90,6 +92,11 @@ export class RunStore {
     private readonly logger: Logger,
     private readonly opts: RunStoreOptions = {}
   ) {}
+
+  private syncInterval(): number {
+    const ms = this.opts.syncIntervalMs?.() ?? SYNC_INTERVAL_MS
+    return Number.isFinite(ms) ? Math.min(10_000, Math.max(250, ms)) : SYNC_INTERVAL_MS
+  }
 
   runDir(runId: string): string {
     if (!RUN_ID_PATTERN.test(runId)) throw new Error('invalid run id')
@@ -160,7 +167,7 @@ export class RunStore {
       manifest,
       tracks,
       failed: false,
-      timer: setInterval(() => void this.sync(init.runId), SYNC_INTERVAL_MS)
+      timer: setInterval(() => void this.sync(init.runId), this.syncInterval())
     }
     run.timer.unref?.()
     this.active.set(init.runId, run)
@@ -253,8 +260,12 @@ export class RunStore {
     await this.sync(runId)
   }
 
-  /** Flushes and closes a run. The data stays on disk in the `stopped` state until saved or discarded. */
-  async end(runId: string): Promise<RunEndResult> {
+  /**
+   * Flushes and closes a run. The data stays on disk in the `stopped` state until saved or
+   * discarded. With `interrupted`, the recording state is kept, so the run is offered as a
+   * recovered recording (used when the recorder window crashed).
+   */
+  async end(runId: string, interrupted = false): Promise<RunEndResult> {
     const run = this.active.get(runId)
     if (!run) throw new Error('run is not active')
     clearInterval(run.timer)
@@ -278,7 +289,7 @@ export class RunStore {
       frames = Math.min(frames, writer.bytes / (4 * run.manifest.channels))
     }
     if (!Number.isFinite(frames)) frames = 0
-    run.manifest.state = 'stopped'
+    if (!interrupted) run.manifest.state = 'stopped'
     run.manifest.updatedAt = new Date().toISOString()
     await writeFileAtomic(join(run.dir, 'manifest.json'), JSON.stringify(run.manifest, null, 2))
     this.active.delete(runId)
@@ -287,11 +298,11 @@ export class RunStore {
     return { framesWritten: frames, durationMs }
   }
 
-  /** Stops every active run (used when the app quits). */
-  async endAll(): Promise<void> {
+  /** Stops every active run (used when the app quits, or interrupted when the recorder crashed). */
+  async endAll(interrupted = false): Promise<void> {
     for (const runId of [...this.active.keys()]) {
       try {
-        await this.end(runId)
+        await this.end(runId, interrupted)
       } catch (err) {
         this.logger.error('runs', `could not end ${runId}`, err)
       }
