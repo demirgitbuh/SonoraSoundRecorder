@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sonora Sound Recorder</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+      #splash {
+        position: fixed; inset: 0; display: grid; place-items: center; z-index: 1000;
+        transition: opacity 200ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #splash.hide { opacity: 0; pointer-events: none; }
+      #splash svg { width: 72px; height: 72px; animation: splash-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+      @keyframes splash-in { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+      @media (prefers-reduced-motion: reduce) { #splash svg { animation: none; } #splash { transition: none; } }
+    </style>
+  </head>
+  <body>
+    <div id="splash" aria-hidden="true">
+      <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+        <rect x="64" y="64" width="896" height="896" rx="228" fill="#36454F" />
+        <g fill="none" stroke="#F8F8FF" stroke-linecap="round" stroke-linejoin="round" stroke-width="84">
+          <path d="M690 336C652 278 590 250 512 250C414 250 340 302 340 372C340 410 348 440 363 460" />
+          <path d="M334 688C372 746 434 774 512 774C610 774 684 722 684 652C684 614 676 584 661 564" />
+        </g>
+        <g stroke="#F8F8FF" stroke-linecap="round" stroke-width="34">
+          <line x1="436" y1="446" x2="436" y2="526" />
+          <line x1="474" y1="419" x2="474" y2="579" />
+          <line x1="512" y1="392" x2="512" y2="632" />
+          <line x1="550" y1="445" x2="550" y2="605" />
+          <line x1="588" y1="498" x2="588" y2="578" />
+        </g>
+      </svg>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="./src/main.tsx"></script>
+  </body>
+</html>
