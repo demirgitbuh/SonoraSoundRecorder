@@ -1,0 +1,84 @@
+# Tag-triggered release. The tag is used exactly as pushed (for the first release: `0.1`);
+# it must correspond to the version in package.json (0.1 -> 0.1.0).
+name: Release
+
+on:
+  push:
+    tags:
+      - '0.1'
+      - '[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Check tag and version
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tag matches package.json
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PKG=$(node -p "require('./package.json').version")
+          NORM=$(node -e "const t=process.argv[1].split('.');while(t.length<3)t.push('0');console.log(t.join('.'))" "$TAG")
+          echo "tag=$TAG normalized=$NORM package=$PKG"
+          test "$NORM" = "$PKG"
+          test -f "docs/release-notes/$TAG.md"
+
+  build:
+    needs: version
+    uses: ./.github/workflows/build.yml
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: release
+          pattern: sonora-*
+          merge-multiple: true
+
+      - name: All platforms produced their packages
+        shell: bash
+        run: |
+          V=$(node -p "require('./package.json').version")
+          ls -la release
+          mkdir upload
+          for f in \
+            "Sonora-Sound-Recorder-$V-Setup-x64.exe" \
+            "Sonora-Sound-Recorder-$V-Setup-x64.exe.blockmap" \
+            "Sonora-Sound-Recorder-$V-Portable-x64.exe" \
+            "latest.yml" \
+            "Sonora-Sound-Recorder-$V-arm64.dmg" \
+            "Sonora-Sound-Recorder-$V-x64.dmg" \
+            "Sonora-Sound-Recorder-$V-x86_64.AppImage" \
+            "sonora-sound-recorder_${V}_amd64.deb" \
+            "latest-linux.yml"; do
+            test -s "release/$f" || { echo "missing $f"; exit 1; }
+            cp "release/$f" upload/
+          done
+          (cd upload && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+      - name: Create or update the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          TITLE="Sonora Sound Recorder ${TAG}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" upload/* --clobber
+            gh release edit "$TAG" --title "$TITLE" --notes-file "docs/release-notes/$TAG.md" --draft=false --latest
+          else
+            gh release create "$TAG" upload/* --verify-tag --title "$TITLE" --notes-file "docs/release-notes/$TAG.md" --latest
+          fi
+          gh release view "$TAG" --json url,assets --jq '.url, (.assets[] | .name)'

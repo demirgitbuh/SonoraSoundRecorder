@@ -1,0 +1,185 @@
+# Reusable pipeline: checks (type check, tests with the real FFmpeg, production build) followed
+# by native packaging on one runner per operating system and CPU architecture.
+name: Build
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  WHISPER_CPP_TAG: v1.9.5
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+  FORCE_COLOR: '1'
+
+jobs:
+  checks:
+    name: Type check, tests and build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies (lockfile)
+        run: npm ci
+
+      - name: Fetch pinned FFmpeg for integration tests
+        run: npm run fetch:ffmpeg
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+  package:
+    name: Package ${{ matrix.target }}-${{ matrix.arch }}
+    needs: checks
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-2022, target: win, arch: x64, builder: '--win nsis portable --x64' }
+          - { os: macos-15, target: mac, arch: arm64, builder: '--mac dmg --arm64' }
+          - { os: macos-15-intel, target: mac, arch: x64, builder: '--mac dmg --x64' }
+          - { os: ubuntu-22.04, target: linux, arch: x64, builder: '--linux AppImage deb --x64' }
+    env:
+      TARGET_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies (lockfile)
+        run: npm ci
+
+      - name: Fetch pinned FFmpeg / FFprobe
+        run: npm run fetch:ffmpeg
+
+      - name: Check out whisper.cpp ${{ env.WHISPER_CPP_TAG }}
+        uses: actions/checkout@v7
+        with:
+          repository: ggml-org/whisper.cpp
+          ref: ${{ env.WHISPER_CPP_TAG }}
+          path: vendor/whisper-src
+
+      - name: Cache whisper.cpp build
+        id: whisper-cache
+        uses: actions/cache@v6
+        with:
+          path: vendor/whisper-out
+          key: whisper-${{ env.WHISPER_CPP_TAG }}-${{ matrix.target }}-${{ matrix.arch }}-v2
+
+      - name: Build whisper-cli (Windows)
+        if: matrix.target == 'win' && steps.whisper-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          cmake -S vendor/whisper-src -B vendor/whisper-build -A x64 \
+            -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF -DWHISPER_CURL=OFF \
+            -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DGGML_CCACHE=OFF \
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          cmake --build vendor/whisper-build --config Release --target whisper-cli -j 4
+          mkdir -p vendor/whisper-out
+          cp vendor/whisper-build/bin/Release/whisper-cli.exe vendor/whisper-out/
+
+      - name: Build whisper-cli (macOS)
+        if: matrix.target == 'mac' && steps.whisper-cache.outputs.cache-hit != 'true'
+        run: |
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            ARCH=arm64; METAL=ON
+          else
+            ARCH=x86_64; METAL=OFF
+          fi
+          cmake -S vendor/whisper-src -B vendor/whisper-build -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF -DWHISPER_CURL=OFF \
+            -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DGGML_CCACHE=OFF \
+            -DGGML_METAL=$METAL -DGGML_METAL_EMBED_LIBRARY=$METAL \
+            -DCMAKE_OSX_ARCHITECTURES=$ARCH -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+          cmake --build vendor/whisper-build --config Release --target whisper-cli -j 4
+          mkdir -p vendor/whisper-out
+          cp vendor/whisper-build/bin/whisper-cli vendor/whisper-out/
+
+      - name: Build whisper-cli (Linux)
+        if: matrix.target == 'linux' && steps.whisper-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake -S vendor/whisper-src -B vendor/whisper-build -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF -DWHISPER_CURL=OFF \
+            -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DGGML_CCACHE=OFF \
+            -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+          cmake --build vendor/whisper-build --config Release --target whisper-cli -j 4
+          mkdir -p vendor/whisper-out
+          cp vendor/whisper-build/bin/whisper-cli vendor/whisper-out/
+
+      - name: Place whisper-cli and its license
+        shell: bash
+        run: |
+          case "${{ matrix.target }}" in win) OS=win;; mac) OS=mac;; *) OS=linux;; esac
+          DEST="vendor/bin/$OS-${{ matrix.arch }}"
+          mkdir -p "$DEST" vendor/licenses
+          cp vendor/whisper-out/* "$DEST/"
+          chmod +x "$DEST"/whisper-cli* || true
+          cp vendor/whisper-src/LICENSE vendor/licenses/whisper.cpp-LICENSE.txt
+          echo "whisper.cpp ${{ env.WHISPER_CPP_TAG }} (https://github.com/ggml-org/whisper.cpp) built on GitHub Actions" > vendor/licenses/whisper.cpp-VERSION.txt
+          ls -la "$DEST"
+
+      - name: Icons and license resources
+        run: npm run prepare:resources
+
+      - name: Production build
+        run: npm run build
+
+      - name: Package with electron-builder
+        shell: bash
+        run: npx electron-builder ${{ matrix.builder }} --publish never
+
+      - name: Cache tiny whisper model for the smoke test
+        uses: actions/cache@v6
+        with:
+          path: vendor/test-model
+          key: whisper-model-tiny-en-v1
+
+      - name: Download tiny whisper model (test only, not packaged)
+        shell: bash
+        run: |
+          mkdir -p vendor/test-model
+          if [ ! -s vendor/test-model/ggml-tiny.en.bin ]; then
+            curl -fL --retry 4 -o vendor/test-model/ggml-tiny.en.bin \
+              https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin
+          fi
+
+      - name: Verify package
+        shell: bash
+        env:
+          WHISPER_MODEL: ${{ github.workspace }}/vendor/test-model/ggml-tiny.en.bin
+          JFK_WAV: ${{ github.workspace }}/vendor/whisper-src/samples/jfk.wav
+        run: node scripts/verify-package.mjs
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: sonora-${{ matrix.target }}-${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.blockmap
+            dist/latest*.yml
