@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.2
+
+Full notes: [docs/release-notes/0.1.2.md](docs/release-notes/0.1.2.md).
+
+- **Fixed**
+  - Stopping a recording no longer collides with the periodic disk write, which could show a false "recording failed" message or offer the recording as a crashed one.
+  - A recording whose last write fails (disk full) is closed and offered for recovery right away.
+  - Failed saves and exports no longer leave hidden `.sonora-partial` files behind.
+  - Long Cyrillic, Chinese or emoji names fit the 255-byte file name limit of Linux and macOS.
+  - *Check now* keeps an update that is already downloaded or waiting to install; a download that cannot be written shows an error instead of hanging.
+  - Notifications close after their own time, the mini panel remembers its position on Linux, and folders and tags cannot be renamed to an existing name.
+- **Security**
+  - Electron 44.9.3 with Chromium and V8 security backports and the eMudhra certificate mitigation.
+  - CI and releases run on the patched Node.js 24.22.1 (October 21, 2026 security release, CVE-2026-111497 and others); `engines` requires a patched Node.js.
+  - Vitest 4.1.12 removes the critical Tinypool advisories from the development tooling.
+
 ## 0.1.1
 
 Full notes: [docs/release-notes/0.1.1.md](docs/release-notes/0.1.1.md).

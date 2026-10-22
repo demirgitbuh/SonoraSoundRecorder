@@ -1,7 +1,7 @@
 {
   "name": "sonora-sound-recorder",
   "productName": "Sonora Sound Recorder",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A modern desktop sound recorder for microphone and system audio, with local transcription.",
   "main": "out/main/index.js",
   "author": "demirgitbuh",
