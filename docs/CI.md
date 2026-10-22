@@ -8,7 +8,7 @@ All type checks, tests, builds and packages run on GitHub Actions. You do not ne
 | --- | --- | --- |
 | `ci.yml` | push to `main`, pull requests, manual | runs `build.yml` |
 | `build.yml` | reusable | checks + native packaging on four runners |
-| `release.yml` | tag such as `0.1` | verifies tag ↔ version, runs `build.yml`, publishes the GitHub Release |
+| `release.yml` | tag such as `0.1.2` | verifies tag ↔ version, runs `build.yml`, publishes the GitHub Release |
 
 ### `build.yml`
 
@@ -43,11 +43,19 @@ All type checks, tests, builds and packages run on GitHub Actions. You do not ne
 2. Runs the full build. If any platform fails, nothing is published.
 3. Collects the nine required files, writes `SHA256SUMS.txt` and creates the release **"Sonora Sound Recorder &lt;tag&gt;"** with the notes file. Re-running the workflow updates the same release instead of moving the tag.
 
+## Node.js version and security releases
+
+Every workflow job runs on an exact, patched Node.js version (`NODE_VERSION` in `build.yml` and `release.yml`, currently **24.22.1**) instead of whatever version a runner image ships. Older patch versions are vulnerable: the [October 21, 2026 security release](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases) fixed a Brotli decoder RCE (CVE-2026-111497), TLS hostname bypasses (CVE-2026-105483, CVE-2026-106069) and seven more issues in 22.x, 24.x and 26.x. Node.js 18 and 20 are end of life and receive no fixes at all.
+
+- `engines` in `package.json` names the first patched version of each supported line (`^22.23.4 || ^24.22.1 || >=26.12.1`), so npm warns on an outdated local Node.js.
+- After each Node.js security release, raise `NODE_VERSION` in both workflows and the minimums in `engines`.
+- The packaged app runs on the Node.js bundled with Electron, not on the build machine's Node.js. Sonora's own network traffic (update checks and downloads) uses Electron's `net` module (Chromium's network stack), not Node's `http`, `tls`, `dns` or `zlib`. Keep Electron on the newest patch release of its major version, which picks up Node.js and Chromium security fixes.
+
 ## Making a release
 
 ```bash
-git tag 0.1.1
-git push origin 0.1.1
+git tag 0.1.2
+git push origin 0.1.2
 ```
 
 The tag is used exactly as written. Bump `version` in `package.json` and add `docs/release-notes/<tag>.md` before tagging a new version.

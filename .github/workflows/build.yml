@@ -9,7 +9,10 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: '24'
+  # Node.js 24.22.1 is the first 24.x release with the fixes of the October 21, 2026 security
+  # release (Brotli RCE CVE-2026-111497, TLS hostname bypasses and more). Raise it with every
+  # Node.js security release; older patch versions are vulnerable.
+  NODE_VERSION: '24.22.1'
   WHISPER_CPP_TAG: v1.9.5
   ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
   FORCE_COLOR: '1'

@@ -12,12 +12,19 @@ on:
 permissions:
   contents: read
 
+env:
+  # Same patched Node.js as build.yml; the runner's preinstalled Node.js may be older.
+  NODE_VERSION: '24.22.1'
+
 jobs:
   version:
     name: Check tag and version
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
       - name: Tag matches package.json
         shell: bash
         run: |
@@ -40,6 +47,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
       - uses: actions/download-artifact@v8
         with:
