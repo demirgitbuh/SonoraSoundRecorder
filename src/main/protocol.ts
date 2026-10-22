@@ -64,12 +64,13 @@ export const CONTENT_SECURITY_POLICY = [
 export function registerAppProtocol(rendererDir: string): void {
   const root = normalize(rendererDir)
   protocol.handle(APP_SCHEME, async (request) => {
-    const url = new URL(request.url)
-    let pathname = decodeURIComponent(url.pathname)
-    if (pathname === '/' || pathname === '') pathname = '/index.html'
-    const file = normalize(join(root, pathname))
-    if (!file.startsWith(root + sep) && file !== root) return new Response('Forbidden', { status: 403 })
     try {
+      const url = new URL(request.url)
+      // decodeURIComponent throws on malformed escapes such as `%E0%A4`.
+      let pathname = decodeURIComponent(url.pathname)
+      if (pathname === '/' || pathname === '') pathname = '/index.html'
+      const file = normalize(join(root, pathname))
+      if (!file.startsWith(root + sep) && file !== root) return new Response('Forbidden', { status: 403 })
       const s = await stat(file)
       if (!s.isFile()) return new Response('Not found', { status: 404 })
       const stream = Readable.toWeb(createReadStream(file)) as unknown as ReadableStream

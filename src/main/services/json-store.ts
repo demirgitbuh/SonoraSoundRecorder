@@ -74,7 +74,8 @@ export class JsonFile<T> {
     if (this.timer) clearTimeout(this.timer)
     this.timer = setTimeout(() => {
       this.timer = null
-      void this.flush()
+      // flush() already logged the failure and keeps the data dirty for the next write.
+      this.flush().catch(() => undefined)
     }, this.debounceMs)
   }
 

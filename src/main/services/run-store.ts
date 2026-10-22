@@ -70,6 +70,9 @@ interface ActiveRun {
   tracks: Map<TrackKind, TrackWriter>
   timer: NodeJS.Timeout
   failed: boolean
+  /** Syncs run one after another; `end` waits for the last one before closing the files. */
+  syncing: Promise<void>
+  ending: boolean
 }
 
 export interface RunStoreOptions {
@@ -167,6 +170,8 @@ export class RunStore {
       manifest,
       tracks,
       failed: false,
+      syncing: Promise.resolve(),
+      ending: false,
       timer: setInterval(() => void this.sync(init.runId), this.syncInterval())
     }
     run.timer.unref?.()
@@ -234,21 +239,30 @@ export class RunStore {
     await writer.peaksFh.write(chunk)
   }
 
-  private async sync(runId: string): Promise<void> {
+  /**
+   * Forces audio, peaks and the manifest to disk. Calls are chained, so the timer and `update`
+   * never sync at the same time, and nothing is synced once the run is ending (its files are
+   * about to be closed).
+   */
+  private sync(runId: string): Promise<void> {
     const run = this.active.get(runId)
-    if (!run || run.failed) return
-    try {
-      for (const writer of run.tracks.values()) {
-        await writer.queue
-        await this.flushPeaks(writer)
-        await writer.fh.datasync()
-        await writer.peaksFh.datasync()
+    if (!run || run.failed || run.ending) return Promise.resolve()
+    run.syncing = run.syncing.then(async () => {
+      if (run.failed || run.ending) return
+      try {
+        for (const writer of run.tracks.values()) {
+          await writer.queue
+          await this.flushPeaks(writer)
+          await writer.fh.datasync()
+          await writer.peaksFh.datasync()
+        }
+        run.manifest.updatedAt = new Date().toISOString()
+        await writeFileAtomic(join(run.dir, 'manifest.json'), JSON.stringify(run.manifest, null, 2))
+      } catch (err) {
+        this.fail(runId, run, err as Error)
       }
-      run.manifest.updatedAt = new Date().toISOString()
-      await writeFileAtomic(join(run.dir, 'manifest.json'), JSON.stringify(run.manifest, null, 2))
-    } catch (err) {
-      this.fail(runId, run, err as Error)
-    }
+    })
+    return run.syncing
   }
 
   async update(runId: string, patch: RunPatch): Promise<void> {
@@ -267,32 +281,41 @@ export class RunStore {
    */
   async end(runId: string, interrupted = false): Promise<RunEndResult> {
     const run = this.active.get(runId)
-    if (!run) throw new Error('run is not active')
+    if (!run || run.ending) throw new Error('run is not active')
+    run.ending = true
     clearInterval(run.timer)
+    // A periodic sync may still be using the files; closing them under it would report a
+    // spurious write failure.
+    await run.syncing
     let frames = Number.POSITIVE_INFINITY
-    for (const writer of run.tracks.values()) {
-      await writer.queue
-      if (writer.bucketCount > 0) {
-        writer.pendingPeaks.push(Math.min(255, Math.round(Math.min(1, writer.bucketMax) * 255)))
-        writer.bucketCount = 0
-        writer.bucketMax = 0
+    try {
+      for (const writer of run.tracks.values()) {
+        await writer.queue
+        if (writer.bucketCount > 0) {
+          writer.pendingPeaks.push(Math.min(255, Math.round(Math.min(1, writer.bucketMax) * 255)))
+          writer.bucketCount = 0
+          writer.bucketMax = 0
+        }
+        try {
+          await this.flushPeaks(writer)
+          await writer.fh.datasync()
+          await writer.peaksFh.datasync()
+        } catch (err) {
+          this.fail(runId, run, err as Error)
+        }
+        await writer.fh.close().catch(() => undefined)
+        await writer.peaksFh.close().catch(() => undefined)
+        frames = Math.min(frames, writer.bytes / (4 * run.manifest.channels))
       }
-      try {
-        await this.flushPeaks(writer)
-        await writer.fh.datasync()
-        await writer.peaksFh.datasync()
-      } catch (err) {
-        this.fail(runId, run, err as Error)
-      }
-      await writer.fh.close().catch(() => undefined)
-      await writer.peaksFh.close().catch(() => undefined)
-      frames = Math.min(frames, writer.bytes / (4 * run.manifest.channels))
+      if (!Number.isFinite(frames)) frames = 0
+      if (!interrupted) run.manifest.state = 'stopped'
+      run.manifest.updatedAt = new Date().toISOString()
+      await writeFileAtomic(join(run.dir, 'manifest.json'), JSON.stringify(run.manifest, null, 2))
+    } finally {
+      // Even when the manifest cannot be written (disk full), the files are closed: the run is
+      // then listed from its last synced manifest and can still be recovered.
+      this.active.delete(runId)
     }
-    if (!Number.isFinite(frames)) frames = 0
-    if (!interrupted) run.manifest.state = 'stopped'
-    run.manifest.updatedAt = new Date().toISOString()
-    await writeFileAtomic(join(run.dir, 'manifest.json'), JSON.stringify(run.manifest, null, 2))
-    this.active.delete(runId)
     const durationMs = (frames / run.manifest.sampleRate) * 1000
     this.logger.info('runs', `end ${runId} duration=${Math.round(durationMs)}ms`)
     return { framesWritten: frames, durationMs }

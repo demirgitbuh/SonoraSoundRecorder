@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Route } from '../../../shared/ipc'
@@ -175,10 +175,34 @@ export function Toasts() {
   const dismiss = useApp((s) => s.dismissToast)
   const tx = useDynamicT()
   const t = useT()
+  // One timer per toast, started when it appears. Restarting every timer whenever the list
+  // changed kept older toasts on screen for as long as new ones kept arriving.
+  const timers = useRef(new Map<string, number>())
   useEffect(() => {
-    const timers = toasts.map((x) => window.setTimeout(() => dismiss(x.id), x.kind === 'error' ? 10000 : 6000))
-    return () => timers.forEach((id) => window.clearTimeout(id))
+    const live = new Set(toasts.map((x) => x.id))
+    for (const [id, timer] of timers.current) {
+      if (live.has(id)) continue
+      window.clearTimeout(timer)
+      timers.current.delete(id)
+    }
+    for (const x of toasts) {
+      if (timers.current.has(x.id)) continue
+      timers.current.set(
+        x.id,
+        window.setTimeout(() => {
+          timers.current.delete(x.id)
+          dismiss(x.id)
+        }, x.kind === 'error' ? 10000 : 6000)
+      )
+    }
   }, [toasts, dismiss])
+  useEffect(() => {
+    const map = timers.current
+    return () => {
+      for (const timer of map.values()) window.clearTimeout(timer)
+      map.clear()
+    }
+  }, [])
   return (
     <div className="toast-stack" aria-live="polite">
       <AnimatePresence initial={false}>

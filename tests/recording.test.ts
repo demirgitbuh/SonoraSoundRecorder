@@ -1,9 +1,12 @@
-import { appendFileSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { RunInit } from '../src/shared/ipc'
 import { RunStore, computePeaksFromRaw, rawPeak } from '../src/main/services/run-store'
-import { outputTracksFor } from '../src/main/services/audio-service'
+import { AudioService, outputTracksFor } from '../src/main/services/audio-service'
+import { FfmpegError } from '../src/main/services/ffmpeg'
+import type { Ffmpeg } from '../src/main/services/ffmpeg'
+import { LibraryStore } from '../src/main/services/library-store'
 import { floatWavHeader } from '../src/main/services/wav'
 import { RUN_A, RUN_B, RUN_C, sine, tempDir, testLogger } from './helpers'
 
@@ -88,6 +91,42 @@ describe('temporary recording storage', () => {
     const store = new RunStore(join(dir, 'sessions'), testLogger(dir))
     await store.begin(init(RUN_A))
     await expect(store.begin(init(RUN_A))).rejects.toThrow()
+  })
+
+  it('stopping waits for a sync in progress instead of reporting a write failure', async () => {
+    const errors: string[] = []
+    const store = new RunStore(join(dir, 'sessions'), testLogger(dir), { onWriteError: (runId) => errors.push(runId) })
+    await store.begin(init(RUN_A))
+    store.write(RUN_A, 'mic', sine(4800, 2, 48000).buffer as ArrayBuffer)
+    // Make the sync slow, as on a busy disk, so the stop arrives while it is still running.
+    const writer = (store as unknown as { active: Map<string, { tracks: Map<string, { fh: { datasync: () => Promise<void> } }> }> }).active
+      .get(RUN_A)!
+      .tracks.get('mic')!
+    const datasync = writer.fh.datasync.bind(writer.fh)
+    writer.fh.datasync = async () => {
+      await new Promise((r) => setTimeout(r, 120))
+      await datasync()
+    }
+    const syncing = store.update(RUN_A, { markers: [{ id: 'm1', timeMs: 50 }] })
+    const res = await store.end(RUN_A)
+    await syncing
+    expect(errors).toEqual([])
+    expect(res.framesWritten).toBe(4800)
+    const manifest = JSON.parse(readFileSync(join(store.runDir(RUN_A), 'manifest.json'), 'utf8'))
+    expect(manifest.state).toBe('stopped')
+    expect(manifest.markers).toEqual([{ id: 'm1', timeMs: 50 }])
+  })
+
+  it('closes a run even when its manifest cannot be written', async () => {
+    const store = new RunStore(join(dir, 'sessions'), testLogger(dir))
+    await store.begin(init(RUN_A))
+    store.write(RUN_A, 'mic', sine(4800, 2, 48000).buffer as ArrayBuffer)
+    // A directory in place of the manifest makes the final rename fail.
+    rmSync(join(store.runDir(RUN_A), 'manifest.json'))
+    mkdirSync(join(store.runDir(RUN_A), 'manifest.json', 'blocked'), { recursive: true })
+    await expect(store.end(RUN_A)).rejects.toThrow()
+    expect(store.isActive(RUN_A)).toBe(false)
+    expect(store.activeCount()).toBe(0)
   })
 
   it('computes waveform peaks while recording (50 per second)', async () => {
@@ -188,6 +227,29 @@ describe('crash recovery', () => {
     await store.end(RUN_A)
     await store.discard(RUN_A)
     expect(existsSync(store.runDir(RUN_A))).toBe(false)
+  })
+
+  it('a failed save leaves no partial file and keeps the run', async () => {
+    const logger = testLogger(dir)
+    const recDir = join(dir, 'rec')
+    const runs = new RunStore(join(dir, 'sessions'), logger)
+    const library = new LibraryStore({ dataDir: join(dir, 'data'), platform: 'linux', logger, recordingsDir: () => recDir, layout: () => 'flat' })
+    await library.load()
+    // FFmpeg that writes part of the output and then fails, like a crash or a full disk.
+    const ffmpeg = {
+      run: async (args: string[]) => {
+        writeFileSync(args[args.length - 1]!, 'partial output')
+        throw new FfmpegError('ffmpeg exited with code 1', 'Conversion failed!')
+      }
+    } as unknown as Ffmpeg
+    const audio = new AudioService({ ffmpeg, library, runs, logger, recordingsDir: () => recDir })
+    await runs.begin(init(RUN_A))
+    runs.write(RUN_A, 'mic', sine(4800, 2, 48000).buffer as ArrayBuffer)
+    await runs.end(RUN_A)
+    const encoding = { format: 'wav', sampleRate: 48000, channels: 2, bitDepth: 24, bitrateKbps: 0, flacCompression: 5 } as const
+    await expect(audio.saveRun(RUN_A, { name: null, encoding, keep: null, saveMode: 'edited-only', markers: [], normalize: false })).rejects.toThrow()
+    expect(readdirSync(recDir)).toEqual([])
+    expect((await runs.listPending()).map((r) => r.kind)).toEqual(['unsaved'])
   })
 })
 

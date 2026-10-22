@@ -225,11 +225,19 @@ export class WindowManager {
     this.secure(mini)
     mini.setAlwaysOnTop(true, 'floating')
     mini.once('ready-to-show', () => mini.showInactive())
-    mini.on('moved', () => {
-      const b = mini.getBounds()
-      this.deps.settings.update({ miniPanel: { x: b.x, y: b.y } })
+    // 'moved' is only emitted on macOS and Windows; 'move' fires everywhere while dragging.
+    let moveTimer: NodeJS.Timeout | null = null
+    mini.on('move', () => {
+      if (moveTimer) clearTimeout(moveTimer)
+      moveTimer = setTimeout(() => {
+        moveTimer = null
+        if (mini.isDestroyed()) return
+        const b = mini.getBounds()
+        this.deps.settings.update({ miniPanel: { x: b.x, y: b.y } })
+      }, 300)
     })
     mini.on('closed', () => {
+      if (moveTimer) clearTimeout(moveTimer)
       if (this.mini === mini) this.mini = null
     })
     mini.webContents.on('render-process-gone', (_e, details) => {

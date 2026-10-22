@@ -131,6 +131,11 @@ describe('folders, tags and renaming', () => {
     const tagId = lib.createTag('Draft').tags[0]!.id
     lib.add(makeRecording({ id: 'r1', folderId, tagIds: [tagId] }))
     expect(() => lib.createFolder('podcast')).toThrow()
+    const otherFolder = lib.createFolder('Interviews').folders.find((f) => f.name === 'Interviews')!.id
+    expect(() => lib.renameFolder(otherFolder, 'PODCAST')).toThrow('errors.folderExists')
+    expect(lib.renameFolder(folderId, 'podcast').folders.find((f) => f.id === folderId)!.name).toBe('podcast')
+    const otherTag = lib.createTag('Final').tags.find((t) => t.name === 'Final')!.id
+    expect(() => lib.renameTag(otherTag, 'draft')).toThrow('errors.tagExists')
     lib.deleteFolder(folderId)
     lib.deleteTag(tagId)
     expect(lib.get('r1').folderId).toBeNull()

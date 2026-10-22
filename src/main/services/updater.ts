@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
 import { rename, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
+import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import { net, shell } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import type { ReleaseInfo, UpdateStatus } from '../../shared/ipc'
@@ -117,7 +120,10 @@ export class UpdateService {
   }
 
   async check(): Promise<UpdateStatus> {
-    if (this.status.phase === 'checking' || this.status.phase === 'downloading' || this.status.phase === 'installing') return this.status
+    // A downloaded update, or an install deferred until recordings finish, is kept: checking
+    // again would forget the downloaded file and the install the user already asked for.
+    const busy: Array<UpdateStatus['phase']> = ['checking', 'downloading', 'downloaded', 'waiting-for-idle', 'installing']
+    if (busy.includes(this.status.phase)) return this.status
     this.set({ phase: 'checking', errorKey: null, errorDetail: null })
     try {
       let data: GithubRelease | null
@@ -213,21 +219,26 @@ export class UpdateService {
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
     const total = Number(res.headers.get('content-length')) || asset.size
     const hash = createHash('sha256')
-    const out = createWriteStream(part)
     let transferred = 0
+    const report = (chunk: Uint8Array): void => {
+      hash.update(chunk)
+      transferred += chunk.byteLength
+      this.set({ progress: { percent: total ? (transferred / total) * 100 : 0, transferred, total } })
+    }
     try {
-      const reader = res.body.getReader()
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        hash.update(value)
-        transferred += value.byteLength
-        if (!out.write(value)) await new Promise<void>((r) => out.once('drain', () => r()))
-        this.set({ progress: { percent: total ? (transferred / total) * 100 : 0, transferred, total } })
-      }
-      await new Promise<void>((resolve, reject) => out.end((err?: Error | null) => (err ? reject(err) : resolve())))
+      // pipeline() rejects on write errors such as a full disk, which a bare write stream would
+      // only emit as an unhandled 'error' event while the download waited forever for 'drain'.
+      await pipeline(
+        Readable.fromWeb(res.body as WebReadableStream<Uint8Array>),
+        async function* (source: AsyncIterable<Uint8Array>) {
+          for await (const chunk of source) {
+            report(chunk)
+            yield chunk
+          }
+        },
+        createWriteStream(part)
+      )
     } catch (err) {
-      out.destroy()
       await rm(part, { force: true })
       throw err
     }

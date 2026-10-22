@@ -185,6 +185,8 @@ export class AudioService {
             }
             const filter = buildKeepFilter(sampleRanges, gainDb)
             const expectedMs = v.keep ? totalDuration(v.keep) : fullMs
+            // Registered before encoding, so a failed or cancelled encode leaves no partial file.
+            createdFiles.push(tmp)
             const args = [
               '-f',
               'f32le',
@@ -205,7 +207,6 @@ export class AudioService {
                 onProgress: (f) => onProgress?.((done + f) / jobs)
               })
             )
-            createdFiles.push(tmp)
             const probe = await this.describe(tmp)
             const { peaks, durationMs } = await ffmpeg.decodePeaks(tmp)
             await renameNoClobber(tmp, target)
@@ -299,8 +300,13 @@ export class AudioService {
         try {
           if (keepOriginal && !req.normalize) {
             const tmp = this.tempPath(targetDir, ext)
-            await copyFile(rec.filePath, tmp, constants.COPYFILE_EXCL)
-            await renameNoClobber(tmp, target)
+            try {
+              await copyFile(rec.filePath, tmp, constants.COPYFILE_EXCL)
+              await renameNoClobber(tmp, target)
+            } catch (err) {
+              await rm(tmp, { force: true })
+              throw err
+            }
           } else {
             let gainDb: number | null = null
             if (req.normalize) {

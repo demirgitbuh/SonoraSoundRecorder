@@ -233,6 +233,7 @@ export class LibraryStore {
   renameFolder(id: string, name: string): LibrarySnapshot {
     const clean = name.trim().slice(0, 80)
     if (!clean) throw new LibraryError('errors.invalidName')
+    if (this.file.value.folders.some((f) => f.id !== id && f.name.toLowerCase() === clean.toLowerCase())) throw new LibraryError('errors.folderExists')
     this.file.update((d) => {
       const f = d.folders.find((x) => x.id === id)
       if (!f) throw new LibraryError('errors.folderNotFound')
@@ -266,6 +267,7 @@ export class LibraryStore {
   renameTag(id: string, name: string): LibrarySnapshot {
     const clean = name.trim().slice(0, 40)
     if (!clean) throw new LibraryError('errors.invalidName')
+    if (this.file.value.tags.some((t) => t.id !== id && t.name.toLowerCase() === clean.toLowerCase())) throw new LibraryError('errors.tagExists')
     this.file.update((d) => {
       const t = d.tags.find((x) => x.id === id)
       if (!t) throw new LibraryError('errors.tagNotFound')

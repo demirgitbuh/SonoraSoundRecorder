@@ -43,6 +43,24 @@ describe('automatic file names', () => {
     expect(Array.from(sanitizeFileName('x'.repeat(400), 'linux')).length).toBe(180)
   })
 
+  it('keeps long names in non-Latin scripts within the 255-byte file name limit', () => {
+    const utf8Length = (s: string): number => new TextEncoder().encode(s).length
+    for (const platform of ['linux', 'darwin', 'win32'] as const) {
+      const cyrillic = sanitizeFileName('Запись'.repeat(30), platform)
+      const chinese = sanitizeFileName('录音'.repeat(90), platform)
+      const emoji = sanitizeFileName('🎙'.repeat(180), platform)
+      for (const name of [cyrillic, chinese, emoji]) {
+        expect(utf8Length(name)).toBeLessThanOrEqual(200)
+        // Room for the longest suffix and extension Sonora adds.
+        expect(utf8Length(`${name}_edited_system_9999.flac`)).toBeLessThanOrEqual(255)
+      }
+      expect(cyrillic.length).toBe(100)
+      expect(chinese.length).toBe(66)
+      expect(Array.from(emoji).length).toBe(50)
+    }
+    expect(sanitizeFileName(`${'ж'.repeat(99)}.жж`, 'win32')).toBe('ж'.repeat(99))
+  })
+
   it('compares names case-insensitively where the file system is case-insensitive', () => {
     expect(fileNameKey('Rec.WAV', 'win32')).toBe(fileNameKey('rec.wav', 'win32'))
     expect(fileNameKey('Rec.WAV', 'linux')).not.toBe(fileNameKey('rec.wav', 'linux'))

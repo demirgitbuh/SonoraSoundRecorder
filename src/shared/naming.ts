@@ -20,6 +20,12 @@ export function dateFolderName(date: Date): string {
 
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i
 const MAX_NAME_LENGTH = 180
+/**
+ * Linux and macOS limit a file name to 255 bytes of UTF-8, so 180 Cyrillic or Chinese characters
+ * would not fit. The cap leaves room for suffixes such as `_edited_system_2.flac`.
+ */
+const MAX_NAME_BYTES = 200
+const utf8 = new TextEncoder()
 
 export type PlatformName = 'win32' | 'darwin' | 'linux'
 
@@ -45,6 +51,17 @@ export function sanitizeFileName(input: string, platform: PlatformName): string 
   }
   const chars = Array.from(name)
   if (chars.length > MAX_NAME_LENGTH) name = chars.slice(0, MAX_NAME_LENGTH).join('').trim()
+  if (utf8.encode(name).length > MAX_NAME_BYTES) {
+    let bytes = 0
+    let kept = ''
+    for (const ch of Array.from(name)) {
+      bytes += utf8.encode(ch).length
+      if (bytes > MAX_NAME_BYTES) break
+      kept += ch
+    }
+    name = kept.trim()
+  }
+  if (platform === 'win32') name = name.replace(/[. ]+$/, '')
   return name
 }
 
