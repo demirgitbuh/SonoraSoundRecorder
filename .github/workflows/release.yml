@@ -1,5 +1,7 @@
 # Tag-triggered release. The tag is used exactly as pushed (for the first release: `0.1`);
 # it must correspond to the version in package.json (0.1 -> 0.1.0).
+# A manual run (workflow_dispatch) takes the tag as input and creates it at the run's commit,
+# but only after every platform has built; an existing tag is never moved.
 name: Release
 
 on:
@@ -8,6 +10,12 @@ on:
       - '0.1'
       - '[0-9]+.[0-9]+'
       - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to create at this commit and publish, such as 0.1.2
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -15,6 +23,7 @@ permissions:
 env:
   # Same patched Node.js as build.yml; the runner's preinstalled Node.js may be older.
   NODE_VERSION: '24.22.1'
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
   version:
@@ -28,7 +37,12 @@ jobs:
       - name: Tag matches package.json
         shell: bash
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${RELEASE_TAG}"
+          [[ "$TAG" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || { echo "invalid tag $TAG"; exit 1; }
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "tag $TAG already exists; push the tag instead of running the workflow manually"
+            exit 1
+          fi
           PKG=$(node -p "require('./package.json').version")
           NORM=$(node -e "const t=process.argv[1].split('.');while(t.length<3)t.push('0');console.log(t.join('.'))" "$TAG")
           echo "tag=$TAG normalized=$NORM package=$PKG"
@@ -79,12 +93,22 @@ jobs:
           done
           (cd upload && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
 
+      - name: Create the tag (manual run)
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898273+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$RELEASE_TAG" -m "Sonora Sound Recorder $RELEASE_TAG" "$GITHUB_SHA"
+          # A tag pushed with the workflow token does not start this workflow a second time.
+          git push origin "refs/tags/$RELEASE_TAG"
+
       - name: Create or update the release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${RELEASE_TAG}"
           TITLE="Sonora Sound Recorder ${TAG}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" upload/* --clobber

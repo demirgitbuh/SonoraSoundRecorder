@@ -60,6 +60,8 @@ git push origin 0.1.2
 
 The tag is used exactly as written. Bump `version` in `package.json` and add `docs/release-notes/<tag>.md` before tagging a new version.
 
+Without push access to tags, run **Release** manually (*Actions → Release → Run workflow*) on the branch to release and enter the tag. The run checks the tag exactly like a pushed one and refuses a tag that already exists. It creates the annotated tag at the run's commit only after all four platforms have built, then publishes the release.
+
 ## Reading CI results
 
 ```bash
