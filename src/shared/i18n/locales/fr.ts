@@ -91,7 +91,6 @@ const fr: Messages = {
   'capture.systemDisconnected': 'La capture du son système s’est arrêtée.',
   'capture.systemStream': 'Flux de sortie du système',
   'capture.unknown': 'fréquence inconnue',
-  'capture.upsampleNote': 'Votre périphérique fournit {device} ; les enregistrements sont convertis en {target}, ce qui n’ajoute aucun détail.',
   'capture.verified': 'Audio reçu',
   'capture.waiting': 'En attente d’audio',
 
@@ -131,7 +130,6 @@ const fr: Messages = {
   'detail.format': 'Format',
   'detail.importedFrom': 'Importé depuis',
   'detail.label': 'Détails de {name}',
-  'detail.noNativeShare': 'Cette plateforme n’a pas de menu de partage système. Utilisez Exporter, Afficher dans le dossier ou Copier le chemin.',
   'detail.note': 'Note',
   'detail.notePlaceholder': 'Ajoutez une description ou des notes…',
   'detail.openEditor': 'Écouter et modifier',
@@ -191,7 +189,6 @@ const fr: Messages = {
   'editor.positionText': '{position} sur {total}',
   'editor.prevMarker': 'Repère précédent',
   'editor.previewEdits': 'Prévisualiser les modifications',
-  'editor.previewEditsDesc': 'La lecture saute les parties rognées ou coupées.',
   'editor.previewTitle': 'Aperçu',
   'editor.recoveredNote': 'Cet enregistrement a été récupéré après une fermeture inattendue de Sonora. Vérifiez-le puis enregistrez-le.',
   'editor.recoveredTitle': 'Enregistrement récupéré',

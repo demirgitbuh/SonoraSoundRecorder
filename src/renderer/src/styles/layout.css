@@ -226,8 +226,10 @@
   overflow: auto;
   position: relative;
 }
-.content:focus {
+.content:focus,
+.content:focus-visible {
   outline: none;
+  box-shadow: none;
 }
 .page {
   min-height: 100%;

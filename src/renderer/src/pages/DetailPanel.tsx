@@ -236,7 +236,6 @@ export function DetailPanel({ rec }: { rec: Recording }) {
           }}
         />
       </div>
-      {!caps.nativeShare && <p className="field-desc">{t('detail.noNativeShare')}</p>}
 
       <dl className="meta-list">
         {rows.map(([k, v]) => (

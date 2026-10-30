@@ -91,7 +91,6 @@ const ru: Messages = {
   'capture.systemDisconnected': 'Захват системного звука прекращён.',
   'capture.systemStream': 'Поток системного вывода',
   'capture.unknown': 'частота неизвестна',
-  'capture.upsampleNote': 'Устройство выдаёт {device}; записи преобразуются в {target}, что не добавляет деталей.',
   'capture.verified': 'Звук поступает',
   'capture.waiting': 'Ожидание звука',
 
@@ -131,7 +130,6 @@ const ru: Messages = {
   'detail.format': 'Формат',
   'detail.importedFrom': 'Импортировано из',
   'detail.label': 'Сведения о «{name}»',
-  'detail.noNativeShare': 'На этой платформе нет системного меню «Поделиться». Используйте «Экспорт», «Показать в папке» или «Копировать путь к файлу».',
   'detail.note': 'Заметка',
   'detail.notePlaceholder': 'Добавьте описание или заметки…',
   'detail.openEditor': 'Прослушать и править',
@@ -191,7 +189,6 @@ const ru: Messages = {
   'editor.positionText': '{position} из {total}',
   'editor.prevMarker': 'Предыдущая метка',
   'editor.previewEdits': 'Предпрослушивание правок',
-  'editor.previewEditsDesc': 'При воспроизведении обрезанные и вырезанные части пропускаются.',
   'editor.previewTitle': 'Предпросмотр',
   'editor.recoveredNote': 'Эта запись восстановлена после неожиданного завершения Sonora. Проверьте её и сохраните.',
   'editor.recoveredTitle': 'Восстановленная запись',

@@ -399,14 +399,12 @@ export function FormatEditor({
   )
 }
 
-export const OutputCard = memo(function OutputCard({ cfg, state, nativeRate }: { cfg: SessionConfig; state: SessionRuntime['state']; nativeRate: number | null }) {
+export const OutputCard = memo(function OutputCard({ cfg, state }: { cfg: SessionConfig; state: SessionRuntime['state'] }) {
   const t = useT()
   const locale = useApp((s) => s.locale)
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState({ format: cfg.format, profile: cfg.qualityProfile, custom: cfg.custom })
   const locked = state !== 'ready' && state !== 'error'
-  const native = nativeRate
-  const enc = resolveEncoding(cfg.format, cfg.qualityProfile, cfg.custom)
   return (
     <SideCard
       id="output"
@@ -426,7 +424,6 @@ export const OutputCard = memo(function OutputCard({ cfg, state, nativeRate }: {
     >
       <p className="output-summary">{encodingSummary(t, cfg.format, cfg.qualityProfile, cfg.custom, locale)}</p>
       <p className="field-desc">{t(PROFILE_KEYS[cfg.qualityProfile])}</p>
-      {native && native < enc.sampleRate && <p className="field-desc warn-text">{t('capture.upsampleNote', { device: formatKHz(native, locale), target: formatKHz(enc.sampleRate, locale) })}</p>}
       {cfg.source === 'both' && (
         <div className="stack" style={{ gap: 6, marginTop: 12 }}>
           <span className="eyebrow">{t('record.outputMode')}</span>

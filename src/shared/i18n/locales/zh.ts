@@ -91,7 +91,6 @@ const zh: Messages = {
   'capture.systemDisconnected': '系统声音捕获已结束。',
   'capture.systemStream': '系统输出流',
   'capture.unknown': '采样率未知',
-  'capture.upsampleNote': '你的设备提供 {device}；录音会转换为 {target}，这不会增加细节。',
   'capture.verified': '正在接收音频',
   'capture.waiting': '等待音频',
 
@@ -131,7 +130,6 @@ const zh: Messages = {
   'detail.format': '格式',
   'detail.importedFrom': '导入自',
   'detail.label': '{name} 的详细信息',
-  'detail.noNativeShare': '此平台没有系统分享面板。请使用“导出”“在文件夹中显示”或“复制文件路径”。',
   'detail.note': '备注',
   'detail.notePlaceholder': '添加说明或备注…',
   'detail.openEditor': '播放与编辑',
@@ -191,7 +189,6 @@ const zh: Messages = {
   'editor.positionText': '{position} / {total}',
   'editor.prevMarker': '上一个标记',
   'editor.previewEdits': '预览编辑效果',
-  'editor.previewEditsDesc': '播放时会跳过已裁剪或剪切的部分。',
   'editor.previewTitle': '预览',
   'editor.recoveredNote': '这条录音是在 Sonora 意外关闭后恢复的。请检查后保存。',
   'editor.recoveredTitle': '已恢复的录音',

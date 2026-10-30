@@ -586,9 +586,11 @@
   border-radius: var(--radius-sm);
   padding: 2px 6px;
   margin-left: -6px;
-  font-size: 22px;
-  font-weight: 680;
-  letter-spacing: -0.02em;
+  font-family: var(--font-display);
+  font-size: calc(34px * var(--display-scale));
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  line-height: 1.15;
   color: var(--text-strong);
   transition: border-color var(--dur) var(--ease);
 }

@@ -91,7 +91,6 @@ const de: Messages = {
   'capture.systemDisconnected': 'Die Systemaudio-Aufnahme wurde beendet.',
   'capture.systemStream': 'Systemausgabe-Stream',
   'capture.unknown': 'unbekannte Rate',
-  'capture.upsampleNote': 'Ihr Gerät liefert {device}; Aufnahmen werden in {target} umgerechnet, was keine Details hinzufügt.',
   'capture.verified': 'Audio kommt an',
   'capture.waiting': 'Warte auf Audio',
 
@@ -131,7 +130,6 @@ const de: Messages = {
   'detail.format': 'Format',
   'detail.importedFrom': 'Importiert aus',
   'detail.label': 'Details zu {name}',
-  'detail.noNativeShare': 'Diese Plattform hat kein System-Teilen-Menü. Verwenden Sie Exportieren, Im Ordner zeigen oder Dateipfad kopieren.',
   'detail.note': 'Notiz',
   'detail.notePlaceholder': 'Beschreibung oder Notizen hinzufügen…',
   'detail.openEditor': 'Abspielen & bearbeiten',
@@ -191,7 +189,6 @@ const de: Messages = {
   'editor.positionText': '{position} von {total}',
   'editor.prevMarker': 'Vorheriger Marker',
   'editor.previewEdits': 'Bearbeitungen vorhören',
-  'editor.previewEditsDesc': 'Die Wiedergabe überspringt gekürzte oder geschnittene Teile.',
   'editor.previewTitle': 'Vorschau',
   'editor.recoveredNote': 'Diese Aufnahme wurde wiederhergestellt, nachdem Sonora unerwartet beendet wurde. Prüfen und speichern Sie sie.',
   'editor.recoveredTitle': 'Wiederhergestellte Aufnahme',

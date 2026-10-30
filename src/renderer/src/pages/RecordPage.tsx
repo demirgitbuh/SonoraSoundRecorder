@@ -241,7 +241,7 @@ const SidePanel = memo(function SidePanel({
         <LevelMeters sessionId={sessionId} mic={cfg.source !== 'system'} system={cfg.source !== 'mic'} active={live} />
       </SideCard>
       <SourceCard cfg={cfg} state={state} capture={capture} caps={caps} />
-      <OutputCard cfg={cfg} state={state} nativeRate={capture?.mic?.nativeSampleRate ?? null} />
+      <OutputCard cfg={cfg} state={state} />
       <ScheduleCard />
     </>
   )

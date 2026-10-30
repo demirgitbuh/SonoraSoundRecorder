@@ -90,7 +90,6 @@ const en = {
   'capture.systemDisconnected': 'System audio capture ended.',
   'capture.systemStream': 'System output stream',
   'capture.unknown': 'unknown rate',
-  'capture.upsampleNote': 'Your device delivers {device}; recordings are converted to {target}, which adds no detail.',
   'capture.verified': 'Receiving audio',
   'capture.waiting': 'Waiting for audio',
 
@@ -130,7 +129,6 @@ const en = {
   'detail.format': 'Format',
   'detail.importedFrom': 'Imported from',
   'detail.label': 'Details for {name}',
-  'detail.noNativeShare': 'This platform has no system share sheet. Use Export, Show in folder or Copy file path.',
   'detail.note': 'Note',
   'detail.notePlaceholder': 'Add a description or notes…',
   'detail.openEditor': 'Play & edit',
@@ -190,7 +188,6 @@ const en = {
   'editor.positionText': '{position} of {total}',
   'editor.prevMarker': 'Previous marker',
   'editor.previewEdits': 'Preview edits',
-  'editor.previewEditsDesc': 'Playback skips the parts you trimmed or cut.',
   'editor.previewTitle': 'Preview',
   'editor.recoveredNote': 'This recording was recovered after Sonora closed unexpectedly. Check it, then save it.',
   'editor.recoveredTitle': 'Recovered recording',

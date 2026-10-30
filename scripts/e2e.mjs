@@ -166,6 +166,9 @@ async function run() {
   await shot(page, 'editor-preview')
   await page.getByRole('button', { name: 'Kaydı kaydet' }).click()
   await page.waitForSelector('.record-page', { timeout: 30_000 })
+  // A finished take leaves a clean screen: clock at zero, no old capture details.
+  await page.waitForSelector('.serif-clock[aria-label="00:00:00"]', { timeout: 10_000 })
+  assert((await page.locator('.capture-info').count()) === 0, 'capture details are cleared after the take')
 
   log('archive: saved recording')
   await nav(page, 'Arşiv')

@@ -435,3 +435,18 @@
   font-size: 19px;
   letter-spacing: 0;
 }
+
+/* Serif titles in the editor cards and the archive detail panel. */
+.editor-grid .card-head h2,
+.detail-head h2 {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  line-height: 1.15;
+}
+.editor-grid .card-head h2 {
+  font-size: calc(24px * var(--display-scale));
+}
+.detail-head h2 {
+  font-size: calc(26px * var(--display-scale));
+}

@@ -158,7 +158,13 @@ export class SessionController {
   ) {
     this.live = liveData(id)
     this.machine.subscribe((state) => {
-      this.patch({ state })
+      if (state === 'ready' && !this.testMode) {
+        this.frames = 0
+        this.markers = []
+        this.patch({ state, elapsedMs: 0, rawBytes: 0, markers: [], capture: null })
+      } else {
+        this.patch({ state })
+      }
       host.onStateChange()
     })
   }

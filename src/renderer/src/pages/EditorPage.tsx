@@ -535,7 +535,6 @@ export function EditorPage({ source }: { source: EditorSource }) {
             <Switch checked={previewEdits} label={t('editor.previewEdits')} onChange={setPreviewEdits} />
             <span>{t('editor.previewEdits')}</span>
           </div>
-          <p className="field-desc">{t('editor.previewEditsDesc')}</p>
         </section>
 
         <section className="card card-pad">

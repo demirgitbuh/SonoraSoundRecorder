@@ -91,7 +91,6 @@ const tr: Messages = {
   'capture.systemDisconnected': 'Sistem sesi yakalama sona erdi.',
   'capture.systemStream': 'Sistem çıkış akışı',
   'capture.unknown': 'bilinmeyen örnekleme hızı',
-  'capture.upsampleNote': 'Cihazınız {device} sağlıyor; kayıtlar {target} değerine dönüştürülür, bu ek ayrıntı katmaz.',
   'capture.verified': 'Ses geliyor',
   'capture.waiting': 'Ses bekleniyor',
 
@@ -131,7 +130,6 @@ const tr: Messages = {
   'detail.format': 'Biçim',
   'detail.importedFrom': 'Kaynak dosya',
   'detail.label': '{name} ayrıntıları',
-  'detail.noNativeShare': 'Bu platformda sistem paylaşım menüsü yok. Dışa aktar, Klasörde göster veya Dosya yolunu kopyala seçeneklerini kullanın.',
   'detail.note': 'Not',
   'detail.notePlaceholder': 'Açıklama veya not ekleyin…',
   'detail.openEditor': 'Dinle ve düzenle',
@@ -191,7 +189,6 @@ const tr: Messages = {
   'editor.positionText': '{position} / {total}',
   'editor.prevMarker': 'Önceki işaret',
   'editor.previewEdits': 'Düzenlemeleri önizle',
-  'editor.previewEditsDesc': 'Oynatma, kırptığınız veya kestiğiniz bölümleri atlar.',
   'editor.previewTitle': 'Önizleme',
   'editor.recoveredNote': 'Bu kayıt, Sonora beklenmedik biçimde kapandıktan sonra kurtarıldı. Kontrol edip kaydedin.',
   'editor.recoveredTitle': 'Kurtarılan kayıt',
