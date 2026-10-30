@@ -7,15 +7,21 @@ import type { AudioFormat, CustomEncoding, FolderCheck, ModelInfo, PermissionSta
 import type { AutostartStatus, SettingsImportPreview } from '../../../shared/ipc'
 import { timestampName } from '../../../shared/naming'
 import { AppError, invoke } from '../api'
-import { Button, Field, Modal, Notice, Segmented, Select, Switch } from '../components/controls'
+import { Button, Field, Logo, Modal, Segmented, Select, Switch } from '../components/controls'
 import { defaultDeveloper } from '../../../shared/developer'
+import { REPO_URL, legalDoc } from '../../../shared/legal'
+import type { LegalDocId } from '../../../shared/legal'
+import { LegalModal } from './Legal'
 import {
   Accessibility,
   Bell,
+  BookOpen,
   Cpu,
   FileAudio,
+  ExternalLink,
   FileText,
   FolderOpen,
+  Info,
   Keyboard,
   Mic,
   RefreshCw,
@@ -35,8 +41,8 @@ import { FormatEditor } from './RecordPanels'
 import { ShortcutEditor } from './ShortcutEditor'
 import { reportBulk } from './bulk'
 
-/** Developer settings have their own page, so they are not a category here. */
-type PageCategory = Exclude<SettingsCategory, 'developer'>
+/** Developer settings have their own page; "about" is a page-only category without a reset. */
+type PageCategory = Exclude<SettingsCategory, 'developer'> | 'about'
 
 const CATEGORIES: Array<{ id: PageCategory; icon: LucideIcon; key: MessageKey }> = [
   { id: 'general', icon: Settings, key: 'settings.cat.general' },
@@ -48,7 +54,8 @@ const CATEGORIES: Array<{ id: PageCategory; icon: LucideIcon; key: MessageKey }>
   { id: 'notifications', icon: Bell, key: 'settings.cat.notifications' },
   { id: 'transcription', icon: FileText, key: 'settings.cat.transcription' },
   { id: 'updates', icon: RefreshCw, key: 'settings.cat.updates' },
-  { id: 'advanced', icon: Wrench, key: 'settings.cat.advanced' }
+  { id: 'advanced', icon: Wrench, key: 'settings.cat.advanced' },
+  { id: 'about', icon: Info, key: 'settings.cat.about' }
 ]
 
 const WHISPER_LANGUAGES: Array<[string, string]> = [
@@ -120,7 +127,7 @@ function GeneralSection() {
   }, [s.launchAtLogin])
   return (
     <Section title={t('settings.cat.general')} category="general">
-      <Field label={t('settings.general.language')} description={t('settings.general.languageDesc')}>
+      <Field label={t('settings.general.language')}>
         <Select label={t('settings.general.language')} value={s.language ?? 'en'} onChange={(e) => void update({ language: e.target.value as (typeof LOCALES)[number] })}>
           {LOCALES.map((l) => (
             <option key={l} value={l} lang={l}>
@@ -132,11 +139,12 @@ function GeneralSection() {
       <Field
         label={t('settings.general.launchAtLogin')}
         description={
-          <>
-            {t('settings.general.launchAtLoginDesc')}
-            {autostart?.noteKey ? ` ${t(autostart.noteKey as MessageKey)}` : ''}
-            {autostart && !autostart.supported ? ` ${t('settings.general.autostartUnsupported')}` : ''}
-          </>
+          autostart?.noteKey || (autostart && !autostart.supported) ? (
+            <>
+              {autostart?.noteKey ? t(autostart.noteKey as MessageKey) : ''}
+              {autostart && !autostart.supported ? ` ${t('settings.general.autostartUnsupported')}` : ''}
+            </>
+          ) : undefined
         }
       >
         <Switch
@@ -146,10 +154,10 @@ function GeneralSection() {
           onChange={(v) => void update({ launchAtLogin: v })}
         />
       </Field>
-      <Field label={t('settings.general.startHidden')} description={t('settings.general.startHiddenDesc')}>
+      <Field label={t('settings.general.startHidden')}>
         <Switch checked={s.startHiddenAtLogin} disabled={!s.launchAtLogin} label={t('settings.general.startHidden')} onChange={(v) => void update({ startHiddenAtLogin: v })} />
       </Field>
-      <Field label={t('settings.general.closeBehavior')} description={t('settings.general.closeBehaviorDesc')}>
+      <Field label={t('settings.general.closeBehavior')}>
         <span className="faint">{t('settings.general.toTray')}</span>
       </Field>
     </Section>
@@ -163,7 +171,7 @@ function RecordingSection() {
   const r = s.recording
   return (
     <Section title={t('settings.cat.recording')} category="recording">
-      <Field label={t('settings.recording.countdown')} description={t('settings.recording.countdownDesc')}>
+      <Field label={t('settings.recording.countdown')}>
         <Segmented<number>
           label={t('settings.recording.countdown')}
           value={r.countdownSeconds}
@@ -176,7 +184,7 @@ function RecordingSection() {
           ]}
         />
       </Field>
-      <Field label={t('settings.recording.after')} description={t('settings.recording.afterDesc')} stacked>
+      <Field label={t('settings.recording.after')} stacked>
         <Segmented<'autosave' | 'ask-name' | 'preview'>
           label={t('settings.recording.after')}
           value={r.postAction}
@@ -188,7 +196,7 @@ function RecordingSection() {
           ]}
         />
       </Field>
-      <Field label={t('settings.recording.defaultSource')} description={t('settings.recording.defaultSourceDesc')}>
+      <Field label={t('settings.recording.defaultSource')}>
         <Segmented<'mic' | 'system' | 'both'>
           label={t('settings.recording.defaultSource')}
           value={r.defaultSource}
@@ -200,7 +208,7 @@ function RecordingSection() {
           ]}
         />
       </Field>
-      <Field label={t('settings.recording.defaultOutput')} description={t('settings.recording.defaultOutputDesc')}>
+      <Field label={t('settings.recording.defaultOutput')}>
         <Segmented<'combined' | 'separate' | 'both'>
           label={t('settings.recording.defaultOutput')}
           value={r.defaultOutputMode}
@@ -212,7 +220,7 @@ function RecordingSection() {
           ]}
         />
       </Field>
-      <Field label={t('settings.recording.defaultFormat')} description={t('settings.recording.defaultFormatDesc')} stacked>
+      <Field label={t('settings.recording.defaultFormat')} stacked>
         <FormatEditor
           format={r.defaultFormat}
           profile={r.defaultProfile}
@@ -222,7 +230,7 @@ function RecordingSection() {
           }
         />
       </Field>
-      <Field label={t('settings.recording.normalize')} description={t('settings.recording.normalizeDesc')}>
+      <Field label={t('settings.recording.normalize')}>
         <Switch checked={s.export.normalize} label={t('settings.recording.normalize')} onChange={(v) => void update({ export: { normalize: v } })} />
       </Field>
     </Section>
@@ -241,14 +249,14 @@ function AudioSection() {
   }, [])
   const a = s.audio
   const supported = navigator.mediaDevices.getSupportedConstraints()
-  const enh: Array<{ key: 'noiseSuppression' | 'echoCancellation' | 'autoGainControl'; label: MessageKey; desc: MessageKey }> = [
-    { key: 'noiseSuppression', label: 'processing.noiseSuppression', desc: 'settings.audio.noiseDesc' },
-    { key: 'echoCancellation', label: 'processing.echoCancellation', desc: 'settings.audio.echoDesc' },
-    { key: 'autoGainControl', label: 'processing.autoGainControl', desc: 'settings.audio.agcDesc' }
+  const enh: Array<{ key: 'noiseSuppression' | 'echoCancellation' | 'autoGainControl'; label: MessageKey }> = [
+    { key: 'noiseSuppression', label: 'processing.noiseSuppression' },
+    { key: 'echoCancellation', label: 'processing.echoCancellation' },
+    { key: 'autoGainControl', label: 'processing.autoGainControl' }
   ]
   return (
     <Section title={t('settings.cat.audio')} category="audio">
-      <Field label={t('settings.audio.defaultMic')} description={t('settings.audio.defaultMicDesc')}>
+      <Field label={t('settings.audio.defaultMic')}>
         <Select label={t('settings.audio.defaultMic')} value={a.defaultMicDeviceId ?? ''} onChange={(e) => void update({ audio: { defaultMicDeviceId: e.target.value || null } })}>
           <option value="">{t('devices.systemDefault')}</option>
           {inputs.map((d) => (
@@ -262,19 +270,12 @@ function AudioSection() {
         <Field
           key={e.key}
           label={t(e.label)}
-          description={
-            <>
-              {t(e.desc)} {!supported[e.key] ? <strong className="warn-text">{t('processing.unsupported')}</strong> : null}
-            </>
-          }
+          description={!supported[e.key] ? <strong className="warn-text">{t('processing.unsupported')}</strong> : undefined}
         >
           <Switch checked={a[e.key]} disabled={!supported[e.key]} label={t(e.label)} onChange={(v) => void update({ audio: e.key === 'noiseSuppression' ? { noiseSuppression: v } : e.key === 'echoCancellation' ? { echoCancellation: v } : { autoGainControl: v } })} />
         </Field>
       ))}
-      <p className="field-desc" style={{ padding: '10px 0' }}>
-        {t('settings.audio.processingNote')}
-      </p>
-      <Field label={t('permissions.microphone')} description={t(`permissions.desc.${caps.platform}` as MessageKey)}>
+      <Field label={t('permissions.microphone')}>
         {perm?.microphone === 'granted' ? (
           <OkPill>{t('permissions.granted')}</OkPill>
         ) : perm?.microphone === 'denied' || perm?.microphone === 'restricted' ? (
@@ -287,7 +288,7 @@ function AudioSection() {
           </Button>
         )}
       </Field>
-      <Field label={t('permissions.systemAudio')} description={t(`platform.systemAudio.${caps.systemAudio.method}` as MessageKey)}>
+      <Field label={t('permissions.systemAudio')}>
         {caps.systemAudio.status === 'supported' ? (
           <OkPill>{t('platform.available')}</OkPill>
         ) : caps.systemAudio.status === 'needs-permission' ? (
@@ -344,12 +345,12 @@ function FilesSection() {
             ))}
         </div>
       </Field>
-      <Field label={t('settings.files.move')} description={t('settings.files.moveDesc')}>
+      <Field label={t('settings.files.move')}>
         <Button size="sm" disabled={!dir} onClick={() => dir && setPendingMove(dir)}>
           {t('settings.files.moveButton')}
         </Button>
       </Field>
-      <Field label={t('settings.files.layout')} description={t('settings.files.layoutDesc')}>
+      <Field label={t('settings.files.layout')}>
         <Segmented<'flat' | 'by-date'>
           label={t('settings.files.layout')}
           value={s.files.layout}
@@ -360,7 +361,7 @@ function FilesSection() {
           ]}
         />
       </Field>
-      <Field label={t('settings.files.naming')} description={t('settings.files.namingDesc')}>
+      <Field label={t('settings.files.naming')}>
         <code className="code-chip">{timestampName(new Date())}.wav</code>
       </Field>
       <Modal
@@ -403,7 +404,7 @@ function AppearanceSection() {
   const update = useApp((st) => st.updateSettings)
   return (
     <Section title={t('settings.cat.appearance')} category="appearance">
-      <Field label={t('settings.appearance.theme')} description={t('settings.appearance.themeDesc')}>
+      <Field label={t('settings.appearance.theme')}>
         <Segmented<'light' | 'dark'>
           label={t('settings.appearance.theme')}
           value={s.theme}
@@ -414,7 +415,7 @@ function AppearanceSection() {
           ]}
         />
       </Field>
-      <Field label={t('settings.appearance.scale')} description={t('settings.appearance.scaleDesc')}>
+      <Field label={t('settings.appearance.scale')}>
         <Select label={t('settings.appearance.scale')} value={s.uiScale} onChange={(e) => void update({ uiScale: Number(e.target.value) })}>
           {[0.9, 1, 1.1, 1.25, 1.5, 1.75].map((v) => (
             <option key={v} value={v}>
@@ -423,10 +424,10 @@ function AppearanceSection() {
           ))}
         </Select>
       </Field>
-      <Field label={t('settings.appearance.contrast')} description={t('settings.appearance.contrastDesc')}>
+      <Field label={t('settings.appearance.contrast')}>
         <Switch checked={s.highContrast} label={t('settings.appearance.contrast')} onChange={(v) => void update({ highContrast: v })} />
       </Field>
-      <Field label={t('settings.appearance.motion')} description={t('settings.appearance.motionDesc')}>
+      <Field label={t('settings.appearance.motion')}>
         <Segmented<'system' | 'on' | 'off'>
           label={t('settings.appearance.motion')}
           value={s.reduceMotion}
@@ -438,7 +439,7 @@ function AppearanceSection() {
           ]}
         />
       </Field>
-      <Field label={t('settings.appearance.waveforms')} description={t('settings.appearance.waveformsDesc')}>
+      <Field label={t('settings.appearance.waveforms')}>
         <Switch checked={s.archive.showWaveforms} label={t('settings.appearance.waveforms')} onChange={(v) => void update({ archive: { showWaveforms: v } })} />
       </Field>
     </Section>
@@ -452,7 +453,7 @@ function NotificationsSection() {
   const n = s.notifications
   return (
     <Section title={t('settings.cat.notifications')} category="notifications">
-      <Field label={t('settings.notifications.scope')} description={t('settings.notifications.scopeDesc')}>
+      <Field label={t('settings.notifications.scope')}>
         <Segmented<'all' | 'errors'>
           label={t('settings.notifications.scope')}
           value={n.scope}
@@ -463,13 +464,13 @@ function NotificationsSection() {
           ]}
         />
       </Field>
-      <Field label={t('settings.notifications.desktop')} description={t('settings.notifications.desktopDesc')}>
+      <Field label={t('settings.notifications.desktop')}>
         <Switch checked={n.desktop} label={t('settings.notifications.desktop')} onChange={(v) => void update({ notifications: { desktop: v } })} />
       </Field>
-      <Field label={t('settings.notifications.inApp')} description={t('settings.notifications.inAppDesc')}>
+      <Field label={t('settings.notifications.inApp')}>
         <Switch checked={n.inApp} label={t('settings.notifications.inApp')} onChange={(v) => void update({ notifications: { inApp: v } })} />
       </Field>
-      <Field label={t('settings.notifications.sounds')} description={t('settings.notifications.soundsDesc')}>
+      <Field label={t('settings.notifications.sounds')}>
         <Switch checked={n.sounds} label={t('settings.notifications.sounds')} onChange={(v) => void update({ notifications: { sounds: v } })} />
       </Field>
     </Section>
@@ -492,11 +493,10 @@ function TranscriptionSection() {
   }
   return (
     <Section title={t('settings.cat.transcription')} category="transcription">
-      <Notice title={t('settings.transcription.privacyTitle')}>{t('settings.transcription.privacy')}</Notice>
-      <Field label={t('settings.transcription.engine')} description={t('settings.transcription.engineDesc')}>
+      <Field label={t('settings.transcription.engine')}>
         {caps.whisper ? <OkPill>{t('platform.available')}</OkPill> : <WarnPill>{t('platform.unavailable')}</WarnPill>}
       </Field>
-      <Field label={t('settings.transcription.model')} description={t('settings.transcription.modelFormat')} stacked>
+      <Field label={t('settings.transcription.model')} stacked>
         <div className="stack" style={{ gap: 8 }}>
           <div className="row">
             <Button size="sm" icon={FolderOpen} onClick={() => void choose()}>
@@ -510,7 +510,6 @@ function TranscriptionSection() {
               {model.multilingual === false ? ` · ${t('settings.transcription.englishOnly')}` : ''}
             </span>
           )}
-          <p className="field-desc">{t('settings.transcription.modelHelp')}</p>
           <div className="row">
             <Button size="sm" variant="ghost" onClick={() => void invoke('app:open-external', 'https://huggingface.co/ggerganov/whisper.cpp/tree/main')}>
               {t('settings.transcription.whereToGet')}
@@ -518,7 +517,7 @@ function TranscriptionSection() {
           </div>
         </div>
       </Field>
-      <Field label={t('settings.transcription.language')} description={t('settings.transcription.languageDesc')}>
+      <Field label={t('settings.transcription.language')}>
         <Select label={t('settings.transcription.language')} value={s.transcription.language} onChange={(e) => void update({ transcription: { language: e.target.value } })}>
           <option value="auto">{t('settings.transcription.auto')}</option>
           {WHISPER_LANGUAGES.map(([code, label]) => (
@@ -528,7 +527,7 @@ function TranscriptionSection() {
           ))}
         </Select>
       </Field>
-      <Field label={t('settings.transcription.threads')} description={t('settings.transcription.threadsDesc')}>
+      <Field label={t('settings.transcription.threads')}>
         <Select label={t('settings.transcription.threads')} value={s.transcription.threads} onChange={(e) => void update({ transcription: { threads: Number(e.target.value) } })}>
           <option value={0}>{t('settings.transcription.threadsAuto')}</option>
           {[1, 2, 4, 6, 8, 12, 16].map((n) => (
@@ -555,7 +554,7 @@ function UpdatesSection() {
       <Field label={t('settings.updates.version')} description={t(`update.kindLabel.${boot.capabilities.installKind}` as MessageKey)}>
         <code className="code-chip">{boot.version}</code>
       </Field>
-      <Field label={t('settings.updates.onStartup')} description={t('settings.updates.onStartupDesc')}>
+      <Field label={t('settings.updates.onStartup')}>
         <Switch checked={s.updates.checkOnStartup} label={t('settings.updates.onStartup')} onChange={(v) => void update({ updates: { checkOnStartup: v } })} />
       </Field>
       <Field
@@ -579,9 +578,6 @@ function UpdatesSection() {
           {status?.phase === 'checking' ? t('update.checking') : t('settings.updates.checkNow')}
         </Button>
       </Field>
-      <p className="field-desc" style={{ padding: '10px 0' }}>
-        {t('update.dataSafe')}
-      </p>
     </Section>
   )
 }
@@ -677,12 +673,7 @@ function DeveloperModeField() {
             {t('settings.advanced.developerMode')}
           </span>
         }
-        description={
-          <>
-            {t('settings.advanced.developerModeDesc')}
-            {!s.developer.enabled && customized ? ` ${t('settings.advanced.developerModeKept')}` : ''}
-          </>
-        }
+        description={!s.developer.enabled && customized ? t('settings.advanced.developerModeKept') : undefined}
       >
         {s.developer.enabled && (
           <Button size="sm" onClick={() => navigate('developer')}>
@@ -739,7 +730,7 @@ function AdvancedSection() {
     <section className="settings-section">
       <h2>{t('settings.cat.advanced')}</h2>
       <div className="card card-pad settings-card">
-        <Field label={t('settings.advanced.export')} description={t('settings.advanced.exportDesc')}>
+        <Field label={t('settings.advanced.export')}>
           <Button
             size="sm"
             onClick={async () => {
@@ -754,7 +745,7 @@ function AdvancedSection() {
             {t('settings.advanced.exportButton')}
           </Button>
         </Field>
-        <Field label={t('settings.advanced.import')} description={t('settings.advanced.importDesc')}>
+        <Field label={t('settings.advanced.import')}>
           <Button
             size="sm"
             onClick={async () => {
@@ -769,7 +760,7 @@ function AdvancedSection() {
             {t('settings.advanced.importButton')}
           </Button>
         </Field>
-        <Field label={t('settings.advanced.profiles')} description={t('settings.advanced.profilesDesc')} stacked>
+        <Field label={t('settings.advanced.profiles')} stacked>
           <div className="stack" style={{ gap: 8 }}>
             <div className="row nowrap">
               <input className="input" value={profileName} maxLength={60} placeholder={t('settings.advanced.profileName')} aria-label={t('settings.advanced.profileName')} onChange={(e) => setProfileName(e.target.value)} />
@@ -810,7 +801,7 @@ function AdvancedSection() {
             </ul>
           </div>
         </Field>
-        <Field label={t('settings.advanced.logs')} description={t('settings.advanced.logsDesc')}>
+        <Field label={t('settings.advanced.logs')}>
           <Button
             size="sm"
             onClick={async () => {
@@ -825,12 +816,12 @@ function AdvancedSection() {
           </Button>
         </Field>
         <DeveloperModeField />
-        <Field label={t('settings.advanced.dataLocation')} description={t('settings.advanced.dataLocationDesc')}>
+        <Field label={t('settings.advanced.dataLocation')}>
           <code className="code-chip truncate" title={boot.dataDir}>
             {boot.dataDir}
           </code>
         </Field>
-        <Field label={t('settings.advanced.resetAll')} description={t('settings.advanced.resetAllDesc')}>
+        <Field label={t('settings.advanced.resetAll')}>
           <Button size="sm" variant="danger" onClick={() => setConfirmAll(true)}>
             {t('settings.advanced.resetAllButton')}
           </Button>
@@ -864,6 +855,55 @@ function AdvancedSection() {
   )
 }
 
+function AboutSection() {
+  const t = useT()
+  const locale = useApp((st) => st.locale)
+  const boot = useApp((st) => st.boot)!
+  const legal = useApp((st) => st.settings!.legal)
+  const [doc, setDoc] = useState<LegalDocId | null>(null)
+  return (
+    <section className="settings-section">
+      <h2>{t('settings.cat.about')}</h2>
+      <div className="card about-hero">
+        <Logo size={52} />
+        <div className="about-name">
+          <span className="display">Sonora</span>
+          <span className="about-sub">Sound Recorder · {boot.version}</span>
+        </div>
+      </div>
+      <div className="card card-pad settings-card">
+        <Field
+          label={legalDoc(locale, 'terms').title}
+          description={legal.acceptedAt ? t('settings.about.accepted', { date: formatDateTime(legal.acceptedAt, locale) }) : undefined}
+        >
+          <Button size="sm" icon={BookOpen} onClick={() => setDoc('terms')}>
+            {t('settings.about.read')}
+          </Button>
+        </Field>
+        <Field label={legalDoc(locale, 'privacy').title}>
+          <Button size="sm" icon={BookOpen} onClick={() => setDoc('privacy')}>
+            {t('settings.about.read')}
+          </Button>
+        </Field>
+        <Field label={t('settings.about.license')}>
+          <code className="code-chip">GNU GPL-3.0</code>
+        </Field>
+        <Field label={t('settings.about.source')}>
+          <Button size="sm" variant="ghost" icon={ExternalLink} onClick={() => void invoke('app:open-external', REPO_URL)}>
+            GitHub
+          </Button>
+        </Field>
+        <Field label={t('settings.about.thirdParty')}>
+          <Button size="sm" variant="ghost" icon={ExternalLink} onClick={() => void invoke('app:open-external', `${REPO_URL}/blob/main/THIRD_PARTY_NOTICES.md`)}>
+            {t('settings.about.open')}
+          </Button>
+        </Field>
+      </div>
+      <LegalModal open={doc !== null} initial={doc ?? 'terms'} onClose={() => setDoc(null)} />
+    </section>
+  )
+}
+
 export function SettingsPage() {
   const t = useT()
   const [cat, setCat] = useState<PageCategory>('general')
@@ -881,15 +921,13 @@ export function SettingsPage() {
     notifications: <NotificationsSection />,
     transcription: <TranscriptionSection />,
     updates: <UpdatesSection />,
-    advanced: <AdvancedSection />
+    advanced: <AdvancedSection />,
+    about: <AboutSection />
   }
   return (
     <div className="settings-page">
       <div className="page-head">
-        <div>
-          <h1>{t('nav.settings')}</h1>
-          <p className="muted">{t('settings.subtitle')}</p>
-        </div>
+        <h1>{t('nav.settings')}</h1>
       </div>
       <div className="settings-layout">
         <nav className="settings-nav" aria-label={t('settings.categories')}>

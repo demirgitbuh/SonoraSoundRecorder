@@ -431,7 +431,7 @@ function OverviewPanel() {
         <KeyValues rows={runtimeRows} />
       </DevCard>
 
-      <DevCard title={t('dev.overview.processes')} icon={Cpu} description={t('dev.overview.processesDesc')}>
+      <DevCard title={t('dev.overview.processes')} icon={Cpu}>
         <div className="dev-table-wrap">
           <table className="dev-table">
             <thead>
@@ -475,7 +475,7 @@ function OverviewPanel() {
         )}
       </DevCard>
 
-      <DevCard title={t('dev.overview.binaries')} icon={Terminal} description={t('dev.overview.binariesDesc')}>
+      <DevCard title={t('dev.overview.binaries')} icon={Terminal}>
         <BinaryList items={diag.binaries} />
       </DevCard>
 
@@ -495,7 +495,7 @@ function OverviewPanel() {
         </ul>
       </DevCard>
 
-      <DevCard title={t('dev.overview.chromium')} icon={Zap} description={t('dev.overview.chromiumDesc')}>
+      <DevCard title={t('dev.overview.chromium')} icon={Zap}>
         {diag.boot.restartRequired && <Notice kind="warning">{t('dev.chromium.restartRequired')}</Notice>}
         <KeyValues
           rows={[
@@ -606,8 +606,8 @@ function LogsPanel() {
 
   return (
     <div className="dev-stack">
-      <DevCard title={t('dev.logs.settings')} icon={ScrollText} description={t('dev.logs.settingsDesc')}>
-        <Field label={t('dev.logs.minLevel')} description={t('dev.logs.minLevelDesc')}>
+      <DevCard title={t('dev.logs.settings')} icon={ScrollText}>
+        <Field label={t('dev.logs.minLevel')}>
           <Select label={t('dev.logs.minLevel')} value={d.logging.level} onChange={(e) => update({ logging: { level: e.target.value as DevLogLevel } })}>
             {DEV_LOG_LEVELS.map((l) => (
               <option key={l} value={l}>
@@ -616,10 +616,9 @@ function LogsPanel() {
             ))}
           </Select>
         </Field>
-        <SwitchField label={t('dev.logs.ipcTrace')} description={t('dev.logs.ipcTraceDesc')} checked={d.logging.ipcTrace} onChange={(v) => update({ logging: { ipcTrace: v } })} />
+        <SwitchField label={t('dev.logs.ipcTrace')} checked={d.logging.ipcTrace} onChange={(v) => update({ logging: { ipcTrace: v } })} />
         <SwitchField
           label={t('dev.logs.commandLines')}
-          description={t('dev.logs.commandLinesDesc')}
           checked={d.logging.commandLines}
           onChange={(v) => update({ logging: { commandLines: v } })}
         />
@@ -729,8 +728,8 @@ function AudioPanel() {
     <div className="dev-stack">
       <Notice kind="info">{t('dev.audio.appliesNext')}</Notice>
       <div className="dev-grid">
-        <DevCard title={t('dev.audio.graph')} icon={AudioLines} description={t('dev.audio.graphDesc')}>
-          <Field label={t('dev.audio.latencyLabel')} description={t('dev.audio.latencyDesc')} stacked>
+        <DevCard title={t('dev.audio.graph')} icon={AudioLines}>
+          <Field label={t('dev.audio.latencyLabel')} stacked>
             <Segmented
               value={a.latencyHint}
               label={t('dev.audio.latencyLabel')}
@@ -738,7 +737,7 @@ function AudioPanel() {
               onChange={(v) => update({ audio: { latencyHint: v } })}
             />
           </Field>
-          <Field label={t('dev.audio.chunk')} description={t('dev.audio.chunkDesc')}>
+          <Field label={t('dev.audio.chunk')}>
             <Select label={t('dev.audio.chunk')} value={a.chunkFrames} onChange={(e) => update({ audio: { chunkFrames: Number(e.target.value) as ChunkFrames } })}>
               {CHUNK_FRAME_SIZES.map((n) => (
                 <option key={n} value={n}>
@@ -749,7 +748,6 @@ function AudioPanel() {
           </Field>
           <RangeField
             label={t('dev.audio.meterRate')}
-            description={t('dev.audio.meterRateDesc')}
             value={a.meterHz}
             min={10}
             max={60}
@@ -759,7 +757,6 @@ function AudioPanel() {
           />
           <RangeField
             label={t('dev.audio.clip')}
-            description={t('dev.audio.clipDesc')}
             value={a.clipThresholdDb}
             min={-12}
             max={0}
@@ -769,10 +766,9 @@ function AudioPanel() {
           />
         </DevCard>
 
-        <DevCard title={t('dev.audio.delivery')} icon={Database} description={t('dev.audio.deliveryDesc')}>
+        <DevCard title={t('dev.audio.delivery')} icon={Database}>
           <RangeField
             label={t('dev.audio.sendInterval')}
-            description={t('dev.audio.sendIntervalDesc')}
             value={a.sendIntervalMs}
             min={50}
             max={2000}
@@ -782,7 +778,6 @@ function AudioPanel() {
           />
           <RangeField
             label={t('dev.audio.sync')}
-            description={t('dev.audio.syncDesc')}
             value={d.storage.syncIntervalMs}
             min={250}
             max={10000}
@@ -792,7 +787,6 @@ function AudioPanel() {
           />
           <RangeField
             label={t('dev.audio.dataTimeout')}
-            description={t('dev.audio.dataTimeoutDesc')}
             value={a.dataTimeoutMs}
             min={1000}
             max={30000}
@@ -803,7 +797,7 @@ function AudioPanel() {
         </DevCard>
       </div>
 
-      <DevCard title={t('dev.audio.live')} icon={Activity} description={t('dev.audio.liveDesc')}>
+      <DevCard title={t('dev.audio.live')} icon={Activity}>
         <div className="dev-engine-list">
           {diags.map((g) => {
             const name = sessions.find((s) => s.id === g.id)?.name ?? g.id
@@ -843,7 +837,7 @@ function AudioPanel() {
         </div>
       </DevCard>
 
-      <DevCard title={t('dev.audio.faults')} icon={Unplug} description={t('dev.audio.faultsDesc')}>
+      <DevCard title={t('dev.audio.faults')} icon={Unplug}>
         <div className="row">
           <Button size="sm" icon={Unplug} disabled={!recording} onClick={() => simulate('mic')}>
             {t('dev.audio.simulateMic')}
@@ -927,7 +921,7 @@ function ProcessingPanel() {
         )}
       </DevCard>
 
-      <DevCard title={t('dev.whisper.title')} icon={Braces} description={t('dev.whisper.desc')}>
+      <DevCard title={t('dev.whisper.title')} icon={Braces}>
         <div className="dev-fields-2">
           <Field label={t('dev.whisper.beamSize')} description={t('dev.whisper.zeroDefault')}>
             <NumberInput value={w.beamSize} min={0} max={16} label={t('dev.whisper.beamSize')} onCommit={(v) => update({ whisper: { beamSize: v } })} />
@@ -944,7 +938,6 @@ function ProcessingPanel() {
         </div>
         <RangeField
           label={t('dev.whisper.temperature')}
-          description={t('dev.whisper.temperatureDesc')}
           value={w.temperature}
           min={0}
           max={1}
@@ -952,22 +945,20 @@ function ProcessingPanel() {
           format={(v) => (v === 0 ? def : v.toFixed(2))}
           onCommit={(v) => update({ whisper: { temperature: Math.round(v * 100) / 100 } })}
         />
-        <Field label={t('dev.whisper.prompt')} description={t('dev.whisper.promptDesc')} stacked>
+        <Field label={t('dev.whisper.prompt')} stacked>
           <CommitText multiline value={w.prompt} maxLength={1000} label={t('dev.whisper.prompt')} placeholder={t('dev.whisper.promptPlaceholder')} onCommit={(v) => update({ whisper: { prompt: v } })} />
         </Field>
-        <SwitchField label={t('dev.whisper.translate')} description={t('dev.whisper.translateDesc')} checked={w.translate} onChange={(v) => update({ whisper: { translate: v } })} />
-        <SwitchField label={t('dev.whisper.splitOnWord')} description={t('dev.whisper.splitOnWordDesc')} checked={w.splitOnWord} onChange={(v) => update({ whisper: { splitOnWord: v } })} />
-        <SwitchField label={t('dev.whisper.noFallback')} description={t('dev.whisper.noFallbackDesc')} checked={w.noFallback} onChange={(v) => update({ whisper: { noFallback: v } })} />
+        <SwitchField label={t('dev.whisper.translate')} checked={w.translate} onChange={(v) => update({ whisper: { translate: v } })} />
+        <SwitchField label={t('dev.whisper.splitOnWord')} checked={w.splitOnWord} onChange={(v) => update({ whisper: { splitOnWord: v } })} />
+        <SwitchField label={t('dev.whisper.noFallback')} checked={w.noFallback} onChange={(v) => update({ whisper: { noFallback: v } })} />
         <SwitchField
           label={t('dev.whisper.suppressNonSpeech')}
-          description={t('dev.whisper.suppressNonSpeechDesc')}
           checked={w.suppressNonSpeech}
           onChange={(v) => update({ whisper: { suppressNonSpeech: v } })}
         />
-        <SwitchField label={t('dev.whisper.useGpu')} description={t('dev.whisper.useGpuDesc')} checked={w.useGpu} onChange={(v) => update({ whisper: { useGpu: v } })} />
+        <SwitchField label={t('dev.whisper.useGpu')} checked={w.useGpu} onChange={(v) => update({ whisper: { useGpu: v } })} />
         <SwitchField
           label={t('dev.whisper.flashAttention')}
-          description={t('dev.whisper.flashAttentionDesc')}
           checked={w.flashAttention}
           onChange={(v) => update({ whisper: { flashAttention: v } })}
         />
@@ -984,13 +975,12 @@ function ProcessingPanel() {
       <DevCard
         title={t('dev.temp.title')}
         icon={HardDrive}
-        description={t('dev.temp.desc')}
         actions={<IconButton icon={FolderOpen} small label={t('dev.openFolder')} onClick={() => void invoke('dev:open-path', 'temp').catch(toastError)} />}
       >
-        <SwitchField label={t('dev.temp.keep')} description={t('dev.temp.keepDesc')} checked={d.storage.keepTempFiles} onChange={(v) => update({ storage: { keepTempFiles: v } })} />
+        <SwitchField label={t('dev.temp.keep')} checked={d.storage.keepTempFiles} onChange={(v) => update({ storage: { keepTempFiles: v } })} />
       </DevCard>
 
-      <DevCard title={t('dev.probe.title')} icon={FlaskConical} description={t('dev.probe.desc')}>
+      <DevCard title={t('dev.probe.title')} icon={FlaskConical}>
         <div className="row">
           <Select label={t('dev.probe.recording')} value={probeId} onChange={(e) => setProbeId(e.target.value)}>
             <option value="">{t('dev.probe.pickRecording')}</option>
@@ -1055,13 +1045,11 @@ function SystemPanel() {
         {boot?.restartRequired && <Notice kind="warning">{t('dev.chromium.restartRequired')}</Notice>}
         <SwitchField
           label={t('dev.chromium.hardwareAcceleration')}
-          description={t('dev.chromium.hardwareAccelerationDesc')}
           checked={d.chromium.hardwareAcceleration}
           onChange={(v) => update({ chromium: { hardwareAcceleration: v } })}
         />
         <SwitchField
           label={t('dev.chromium.platformFlags')}
-          description={t('dev.chromium.platformFlagsDesc')}
           checked={d.chromium.platformFlags}
           onChange={(v) => update({ chromium: { platformFlags: v } })}
         />
@@ -1086,8 +1074,8 @@ function SystemPanel() {
 
       <div className="dev-grid">
         <DevCard title={t('dev.ui.title')} icon={Monitor}>
-          <SwitchField label={t('dev.ui.perfOverlay')} description={t('dev.ui.perfOverlayDesc')} checked={d.ui.perfOverlay} onChange={(v) => update({ ui: { perfOverlay: v } })} />
-          <SwitchField label={t('dev.ui.showIds')} description={t('dev.ui.showIdsDesc')} checked={d.ui.showInternalIds} onChange={(v) => update({ ui: { showInternalIds: v } })} />
+          <SwitchField label={t('dev.ui.perfOverlay')} checked={d.ui.perfOverlay} onChange={(v) => update({ ui: { perfOverlay: v } })} />
+          <SwitchField label={t('dev.ui.showIds')} checked={d.ui.showInternalIds} onChange={(v) => update({ ui: { showInternalIds: v } })} />
           <SwitchField
             label={t('dev.ui.devToolsShortcut')}
             description={t('dev.ui.devToolsShortcutDesc', { keys: devToolsKeys })}
@@ -1099,14 +1087,13 @@ function SystemPanel() {
         <DevCard title={t('dev.updates.title')} icon={RefreshCw}>
           <SwitchField
             label={t('dev.updates.prerelease')}
-            description={t('dev.updates.prereleaseDesc')}
             checked={d.updates.allowPrerelease}
             onChange={(v) => update({ updates: { allowPrerelease: v } })}
           />
         </DevCard>
       </div>
 
-      <DevCard title={t('dev.windows.title')} icon={Terminal} description={t('dev.windows.desc')}>
+      <DevCard title={t('dev.windows.title')} icon={Terminal}>
         <div className="row">
           <Button size="sm" onClick={() => void invoke('dev:open-devtools', 'main').catch(toastError)}>
             {t('dev.windows.devtoolsMain')}
@@ -1157,7 +1144,7 @@ function KeyTester() {
   const matches = accelerator ? SHORTCUT_ACTIONS.filter((a) => normalizeAccelerator(bindings[a]) === accelerator) : []
   const space = t('keys.space')
   return (
-    <DevCard title={t('dev.keys.title')} icon={Keyboard} description={t('dev.keys.desc')}>
+    <DevCard title={t('dev.keys.title')} icon={Keyboard}>
       <div className="dev-keypad" tabIndex={0} role="textbox" aria-label={t('dev.keys.area')} data-shortcut-scope="local" onKeyDown={onKeyDown}>
         {last ? (
           <KeyValues
@@ -1268,7 +1255,7 @@ function ToolsPanel() {
       <KeyTester />
 
       <div className="dev-grid">
-        <DevCard title={t('dev.tools.toneTitle')} icon={AudioLines} description={t('dev.tools.toneDesc')}>
+        <DevCard title={t('dev.tools.toneTitle')} icon={AudioLines}>
           <Field label={t('dev.tools.frequency')}>
             <NumberInput value={freq} min={20} max={20000} label={t('dev.tools.frequency')} onCommit={setFreq} />
           </Field>
@@ -1282,7 +1269,7 @@ function ToolsPanel() {
           </div>
         </DevCard>
 
-        <DevCard title={t('dev.stability.title')} icon={Bomb} description={t('dev.stability.desc')}>
+        <DevCard title={t('dev.stability.title')} icon={Bomb}>
           <div className="stack" style={{ gap: 8 }}>
             <Button size="sm" icon={RotateCcw} onClick={() => setConfirm('onboarding')}>
               {t('dev.stability.onboarding')}
@@ -1300,7 +1287,6 @@ function ToolsPanel() {
       <DevCard
         title={t('dev.storage.title')}
         icon={Database}
-        description={t('dev.storage.desc')}
         actions={
           <>
             <IconButton icon={RefreshCw} small label={t('dev.refresh')} onClick={load} />
@@ -1456,7 +1442,6 @@ export function DeveloperPage() {
               {t('dev.badge')}
             </span>
           </h1>
-          <p className="muted">{t('dev.subtitle')}</p>
         </div>
         <div className="row">
           <Button size="sm" variant="ghost" icon={RotateCcw} onClick={() => setConfirmReset(true)}>

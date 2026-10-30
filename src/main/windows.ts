@@ -23,6 +23,8 @@ interface Deps {
   devToolsShortcut: () => boolean
   /** Called after the recorder window crashed, before it is reloaded. */
   onMainRendererGone: () => Promise<void>
+  /** True when the mini panel handles the recording shortcuts itself while it has focus. */
+  miniHandlesKeys: () => boolean
 }
 
 function rendererUrl(kind: 'main' | 'mini'): string {
@@ -83,7 +85,8 @@ export class WindowManager {
     if (this.focusTimer) clearTimeout(this.focusTimer)
     this.focusTimer = setTimeout(() => {
       const focused = BrowserWindow.getFocusedWindow()
-      const ours = !!focused && (focused === this.main || focused === this.mini)
+      // Global shortcuts are released only for windows that handle the keys themselves.
+      const ours = !!focused && (focused === this.main || (focused === this.mini && this.deps.miniHandlesKeys()))
       this.deps.onFocusChange(ours)
       this.send('window:state', { maximized: this.main?.isMaximized() ?? false, focused: ours })
     }, 80)
@@ -130,6 +133,12 @@ export class WindowManager {
       win.hide()
       this.deps.onHidden()
     })
+    // Hidden in the tray or minimized: the interface stops drawing live visuals.
+    const visibility = (): void => this.sendMain('window:visibility', { visible: win.isVisible() && !win.isMinimized() })
+    win.on('show', visibility)
+    win.on('hide', visibility)
+    win.on('minimize', visibility)
+    win.on('restore', visibility)
     win.on('maximize', () => this.send('window:state', { maximized: true, focused: win.isFocused() }))
     win.on('unmaximize', () => this.send('window:state', { maximized: false, focused: win.isFocused() }))
     const saveBounds = (): void => {

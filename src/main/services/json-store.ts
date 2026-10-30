@@ -17,9 +17,16 @@ export class JsonFile<T> {
     private readonly logger: Logger,
     private readonly scope: string,
     initial: T,
-    private readonly debounceMs = 150
+    private readonly debounceMs = 150,
+    /** Indented output for small, human-edited files; large files are written compactly. */
+    private readonly pretty = true
   ) {
     this.data = initial
+  }
+
+  /** Takes data that already matches the file on disk, without writing it again. */
+  adopt(next: T): void {
+    this.data = next
   }
 
   get value(): T {
@@ -86,7 +93,7 @@ export class JsonFile<T> {
     }
     if (!this.dirty) return this.writing
     this.dirty = false
-    const snapshot = JSON.stringify(this.data, null, 2)
+    const snapshot = this.pretty ? JSON.stringify(this.data, null, 2) : JSON.stringify(this.data)
     this.writing = this.writing
       .catch(() => undefined)
       .then(() => writeFileAtomic(this.file, snapshot))

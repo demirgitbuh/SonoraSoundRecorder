@@ -379,6 +379,7 @@ export interface EventMap {
   'task:progress': TaskProgress
   'toast': ToastPayload
   'window:state': { maximized: boolean; focused: boolean }
+  'window:visibility': { visible: boolean }
   'shortcuts:status': ShortcutStatus[]
   'navigate': Route
   'schedules:changed': Schedule[]
@@ -502,6 +503,7 @@ export const EVENT_CHANNELS = [
   'task:progress',
   'toast',
   'window:state',
+  'window:visibility',
   'shortcuts:status',
   'navigate',
   'schedules:changed',

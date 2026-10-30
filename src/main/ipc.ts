@@ -79,7 +79,7 @@ export function registerIpc(ctx: AppContext): void {
 
   function handle<C extends InvokeChannel>(
     channel: C,
-    schema: z.ZodTypeAny,
+    schema: z.ZodType,
     fn: (event: IpcMainInvokeEvent, ...args: InvokeArgs<C>) => Promise<InvokeResult<C>> | InvokeResult<C>
   ): void {
     ipcMain.handle(channel, async (event, ...raw: unknown[]): Promise<IpcEnvelope<InvokeResult<C>>> => {
@@ -139,7 +139,7 @@ export function registerIpc(ctx: AppContext): void {
   })
 
   // -------------------------------------------------------------------------- settings
-  handle('settings:update', z.tuple([z.record(z.unknown())]), async (_e, patch) => {
+  handle('settings:update', z.tuple([z.record(z.string(), z.unknown())]), async (_e, patch) => {
     const p = { ...(patch as SettingsPatch) }
     // The model path can only be changed through the model picker, which validates the file.
     if (p.transcription && 'modelPath' in p.transcription) {
@@ -519,7 +519,10 @@ export function registerIpc(ctx: AppContext): void {
   handle('library:tag-create', z.tuple([z.string().min(1).max(40)]), (_e, name) => ctx.library.createTag(name))
   handle('library:tag-rename', z.tuple([id, z.string().min(1).max(40)]), (_e, tid, name) => ctx.library.renameTag(tid, name))
   handle('library:tag-delete', z.tuple([id]), (_e, tid) => ctx.library.deleteTag(tid))
-  handle('library:search-transcripts', z.tuple([z.string().max(200)]), (_e, text) => ctx.library.searchTranscripts(text))
+  handle('library:search-transcripts', z.tuple([z.string().max(200)]), async (_e, text) => {
+    await ctx.library.ensureTranscriptIndex()
+    return ctx.library.searchTranscripts(text)
+  })
 
   // -------------------------------------------------------------------------- transcription
   handle('transcript:get', z.tuple([id]), (_e, recId) => ctx.library.readTranscript(recId))
@@ -581,7 +584,7 @@ export function registerIpc(ctx: AppContext): void {
         kind: z.enum(['info', 'success', 'warning', 'error']),
         titleKey: z.string().max(120),
         bodyKey: z.string().max(120).optional(),
-        params: z.record(z.union([z.string().max(500), z.number()])).optional(),
+        params: z.record(z.string(), z.union([z.string().max(500), z.number()])).optional(),
         detail: z.string().max(500).optional()
       })
     ]),

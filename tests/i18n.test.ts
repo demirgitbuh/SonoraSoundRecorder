@@ -18,7 +18,7 @@ function sourceFiles(dir: string): string[] {
 }
 
 const NAMESPACES =
-  'common|dev|nav|state|record|source|devices|audio|capture|processing|platform|permissions|output|quality|format|schedule|recovery|editor|player|preview|notify|announce|errors|archive|filters|sort|bulk|detail|transcription|export|edit|trash|collections|settings|shortcuts|update|updates|onboarding|nameDialog|mini|window|titlebar|tray|quit|keys|a11y|files|save'
+  'common|dev|legal|nav|state|record|source|devices|audio|capture|processing|platform|permissions|output|quality|format|schedule|recovery|editor|player|preview|notify|announce|errors|archive|filters|sort|bulk|detail|transcription|export|edit|trash|collections|settings|shortcuts|update|updates|onboarding|nameDialog|mini|window|titlebar|tray|quit|keys|a11y|files|save'
 const NOT_MESSAGES = new Set(['audio.defaultMicDeviceId', 'files.recordingsDir', 'transcription.modelPath', 'settings.json'])
 
 describe('translations', () => {

@@ -4,8 +4,9 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { PendingRun } from '../../../shared/ipc'
 import { AppError, invoke } from '../api'
 import { engine } from '../audio/engine'
-import { Button, Modal, Notice, Progress } from '../components/controls'
-import { ICON_STROKE, MonitorSpeaker, Mic } from '../components/icons'
+import { Button, Modal, Notice } from '../components/controls'
+import { ArrowRight, CircleCheck, ICON_STROKE, MonitorSpeaker, Mic } from '../components/icons'
+import { WaveArt } from '../components/wave-art'
 import { useT } from '../i18n'
 import type { MessageKey } from '../i18n'
 import { useApp } from '../stores/app'
@@ -112,26 +113,50 @@ export function UpdateDialog() {
       <Button onClick={() => setOpen(false)}>{t('common.close')}</Button>
     )
 
+  const percent = update.progress ? Math.round(update.progress.percent) : 0
+  const waveProgress = phase === 'downloading' ? percent : phase === 'downloaded' || phase === 'installing' || phase === 'waiting-for-idle' ? 100 : undefined
+  const newer = rel && phase !== 'not-available'
+
   return (
     <Modal open={open} title={rel ? t('update.title', { version: rel.version }) : t('update.titleGeneric')} onClose={() => setOpen(false)} wide footer={footer}>
       <div className="stack">
-        {rel && (
-          <p className="muted">
-            {t('update.versions', { current: update.currentVersion, next: rel.version })}
-            {rel.publishedAt ? ` · ${formatDate(rel.publishedAt, locale)}` : ''}
-          </p>
-        )}
-        {phase === 'not-available' && <Notice kind="success">{t('update.upToDate', { version: update.currentVersion })}</Notice>}
-        {phase === 'checking' && <p className="muted">{t('update.checking')}</p>}
-        {phase === 'downloading' && update.progress && (
-          <div className="stack" style={{ gap: 6 }}>
-            <span className="muted tnum">
-              {t('update.downloading', { percent: Math.round(update.progress.percent) })}
-              {update.progress.total ? ` · ${formatBytes(update.progress.transferred, locale)} / ${formatBytes(update.progress.total, locale)}` : ''}
-            </span>
-            <Progress value={update.progress.percent} label={t('update.progressLabel')} />
+        <div className={`update-hero phase-${phase}`}>
+          <div className="update-versions">
+            <span className={`update-v ${newer ? 'from' : ''}`}>{update.currentVersion}</span>
+            {newer && rel && (
+              <>
+                <motion.span className="update-arrow" initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.22, delay: 0.08 }}>
+                  <ArrowRight size={22} strokeWidth={ICON_STROKE} aria-hidden="true" />
+                </motion.span>
+                <motion.span className="update-v to" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.26, delay: 0.14, ease: [0.22, 1, 0.36, 1] }}>
+                  {rel.version}
+                </motion.span>
+              </>
+            )}
+            {phase === 'not-available' && <CircleCheck className="update-ok" size={24} strokeWidth={ICON_STROKE} aria-hidden="true" />}
           </div>
-        )}
+          <div
+            className="update-wave"
+            role={phase === 'downloading' ? 'progressbar' : undefined}
+            aria-label={phase === 'downloading' ? t('update.progressLabel') : undefined}
+            aria-valuemin={phase === 'downloading' ? 0 : undefined}
+            aria-valuemax={phase === 'downloading' ? 100 : undefined}
+            aria-valuenow={phase === 'downloading' ? percent : undefined}
+          >
+            <WaveArt progress={waveProgress} className={phase === 'installing' || phase === 'checking' ? 'is-busy' : ''} />
+          </div>
+          <div className="update-caption tnum">
+            {phase === 'downloading' && update.progress
+              ? `${percent}%${update.progress.total ? ` · ${formatBytes(update.progress.transferred, locale)} / ${formatBytes(update.progress.total, locale)}` : ''}`
+              : phase === 'checking'
+                ? t('update.checking')
+                : phase === 'not-available'
+                  ? t('update.upToDate', { version: update.currentVersion })
+                  : rel?.publishedAt
+                    ? formatDate(rel.publishedAt, locale)
+                    : ''}
+          </div>
+        </div>
         {phase === 'waiting-for-idle' && <Notice kind="warning">{t('update.waitingForIdle')}</Notice>}
         {phase === 'installing' && <Notice>{t('update.installing')}</Notice>}
         {phase === 'downloaded' && !update.autoInstall && update.downloadedFile && (
@@ -143,14 +168,12 @@ export function UpdateDialog() {
             {update.errorDetail ? <span className="faint"> ({update.errorDetail})</span> : null}
           </Notice>
         )}
-        {rel && rel.notes && (
+        {newer && rel && rel.notes && (
           <div className="stack" style={{ gap: 6 }}>
             <span className="eyebrow">{t('update.notes')}</span>
             <ReleaseNotes text={rel.notes} />
           </div>
         )}
-        {rel && !update.autoInstall && phase === 'available' && <Notice>{t(`update.kind.${update.installKind}` as MessageKey)}</Notice>}
-        <p className="field-desc">{t('update.dataSafe')}</p>
       </div>
     </Modal>
   )
@@ -327,9 +350,6 @@ export function NameDialog() {
           <span className="field-label">{t('nameDialog.label')}</span>
           <input className="input" data-autofocus value={name} maxLength={180} onChange={(e) => setName(e.target.value)} />
         </label>
-        <p className="field-desc" style={{ marginTop: 8 }}>
-          {t('nameDialog.hint')}
-        </p>
       </form>
     </Modal>
   )

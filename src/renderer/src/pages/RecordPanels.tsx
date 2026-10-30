@@ -1,19 +1,21 @@
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import type { RecordCard } from '../../../shared/settings'
 import { FORMAT_INFO, resolveEncoding, sanitizeEncoding } from '../../../shared/formats'
 import { AUDIO_FORMATS } from '../../../shared/types'
 import type { AudioFormat, CustomEncoding, OutputMode, PlatformCapabilities, QualityProfile, Schedule, SessionConfig, SourceKind } from '../../../shared/types'
 import { invoke } from '../api'
 import { engine } from '../audio/engine'
 import { Button, Field, IconButton, Modal, Notice, Segmented, Select, Slider, Switch } from '../components/controls'
-import { CalendarClock, ICON_STROKE, Mic, MonitorSpeaker, Plus, Sparkles, Trash2 } from '../components/icons'
+import { CalendarClock, ChevronDown, ICON_STROKE, Mic, MonitorSpeaker, Plus, Sparkles, Trash2 } from '../components/icons'
 import { OkPill, WarnPill } from '../components/status'
 import { useT } from '../i18n'
 import type { MessageKey } from '../i18n'
 import { useApp } from '../stores/app'
 import { useDevices } from '../stores/devices'
 import { useEngine } from '../stores/engine'
-import type { ProcessingState, SessionRuntime } from '../stores/engine'
+import type { CaptureInfo, ProcessingState, SessionRuntime } from '../stores/engine'
 import { formatDateTime, formatKHz, toLocalInput } from '../util/format'
 
 async function unlockDeviceLabels(): Promise<void> {
@@ -33,24 +35,73 @@ function processingText(t: ReturnType<typeof useT>, p: ProcessingState): { ok: b
   return { ok: false, text: t('processing.notApplied') }
 }
 
-export function SourceCard({ cfg, rt, caps }: { cfg: SessionConfig; rt: SessionRuntime; caps: PlatformCapabilities }) {
+/**
+ * Card of the record page's side panel. The heading toggles the card; a collapsed card unmounts
+ * its content, so hidden meters and lists cost nothing. The state is kept in the settings.
+ */
+export function SideCard({ id, title, badge, actions, children }: { id: RecordCard; title: string; badge?: ReactNode; actions?: ReactNode; children: ReactNode }) {
+  const collapsed = useApp((s) => s.settings?.layout.collapsedCards.includes(id) ?? false)
+  const toggle = (): void => {
+    const list = useApp.getState().settings?.layout.collapsedCards ?? []
+    const next = list.includes(id) ? list.filter((c) => c !== id) : [...list, id]
+    void useApp.getState().updateSettings({ layout: { collapsedCards: next } })
+  }
+  const bodyId = `side-card-${id}`
+  return (
+    <section className={`card side-card ${collapsed ? 'is-collapsed' : ''}`}>
+      <div className="side-card-head">
+        <h2 className="side-card-title">
+          <button type="button" className="side-card-toggle" aria-expanded={!collapsed} aria-controls={bodyId} onClick={toggle}>
+            <span className="truncate">{title}</span>
+            {badge}
+            <ChevronDown className="side-chevron" size={16} strokeWidth={ICON_STROKE} aria-hidden="true" />
+          </button>
+        </h2>
+        {actions && !collapsed ? <div className="side-card-actions">{actions}</div> : null}
+      </div>
+      <AnimatePresence initial={false}>
+        {!collapsed && (
+          <motion.div
+            key="body"
+            id={bodyId}
+            className="side-card-body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <div className="side-card-inner">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
+  )
+}
+
+export const SourceCard = memo(function SourceCard({
+  cfg,
+  state,
+  capture,
+  caps
+}: {
+  cfg: SessionConfig
+  state: SessionRuntime['state']
+  capture: CaptureInfo | null
+  caps: PlatformCapabilities
+}) {
   const t = useT()
   const locale = useApp((s) => s.locale)
   const inputs = useDevices((s) => s.inputs)
   const monitors = useDevices((s) => s.monitors)
   const labelsAvailable = useDevices((s) => s.labelsAvailable)
-  const locked = rt.state !== 'ready' && rt.state !== 'error'
+  const locked = state !== 'ready' && state !== 'error'
   const update = (patch: Partial<SessionConfig>): void => void engine.updateSession(cfg.id, patch)
   const sysUnsupported = caps.systemAudio.status === 'unsupported'
-  const capture = rt.capture
   const usesMic = cfg.source !== 'system'
   const usesSystem = cfg.source !== 'mic'
 
   return (
-    <div className="card card-pad">
-      <div className="card-head">
-        <h2>{t('record.source')}</h2>
-      </div>
+    <SideCard id="source" title={t('record.source')}>
       <Segmented<SourceKind>
         label={t('record.source')}
         value={cfg.source}
@@ -144,7 +195,6 @@ export function SourceCard({ cfg, rt, caps }: { cfg: SessionConfig; rt: SessionR
               <div className="spacer" />
               <Switch checked={cfg.monitor} label={t('record.monitor')} onChange={(v) => update({ monitor: v })} />
             </div>
-            <p className="field-desc">{t('record.monitorDesc')}</p>
             {cfg.monitor && (
               <LevelSlider label={t('record.monitorLevel')} value={cfg.monitorLevel} max={1} onChange={(v) => update({ monitorLevel: v })} />
             )}
@@ -205,9 +255,9 @@ export function SourceCard({ cfg, rt, caps }: { cfg: SessionConfig; rt: SessionR
           )}
         </div>
       )}
-    </div>
+    </SideCard>
   )
-}
+})
 
 function LevelSlider({ label, value, onChange, max = 2 }: { label: string; value: number; onChange: (v: number) => void; max?: number }) {
   const pct = Math.round(value * 100)
@@ -349,18 +399,19 @@ export function FormatEditor({
   )
 }
 
-export function OutputCard({ cfg, rt }: { cfg: SessionConfig; rt: SessionRuntime }) {
+export const OutputCard = memo(function OutputCard({ cfg, state, nativeRate }: { cfg: SessionConfig; state: SessionRuntime['state']; nativeRate: number | null }) {
   const t = useT()
   const locale = useApp((s) => s.locale)
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState({ format: cfg.format, profile: cfg.qualityProfile, custom: cfg.custom })
-  const locked = rt.state !== 'ready' && rt.state !== 'error'
-  const native = rt.capture?.mic?.nativeSampleRate ?? null
+  const locked = state !== 'ready' && state !== 'error'
+  const native = nativeRate
   const enc = resolveEncoding(cfg.format, cfg.qualityProfile, cfg.custom)
   return (
-    <div className="card card-pad">
-      <div className="card-head">
-        <h2>{t('record.output')}</h2>
+    <SideCard
+      id="output"
+      title={t('record.output')}
+      actions={
         <Button
           size="sm"
           disabled={locked}
@@ -371,7 +422,8 @@ export function OutputCard({ cfg, rt }: { cfg: SessionConfig; rt: SessionRuntime
         >
           {t('common.change')}
         </Button>
-      </div>
+      }
+    >
       <p className="output-summary">{encodingSummary(t, cfg.format, cfg.qualityProfile, cfg.custom, locale)}</p>
       <p className="field-desc">{t(PROFILE_KEYS[cfg.qualityProfile])}</p>
       {native && native < enc.sampleRate && <p className="field-desc warn-text">{t('capture.upsampleNote', { device: formatKHz(native, locale), target: formatKHz(enc.sampleRate, locale) })}</p>}
@@ -388,7 +440,6 @@ export function OutputCard({ cfg, rt }: { cfg: SessionConfig; rt: SessionRuntime
               { value: 'both', label: t('output.both'), disabled: locked }
             ]}
           />
-          <p className="field-desc">{t(`output.${cfg.outputMode}Desc` as MessageKey)}</p>
         </div>
       )}
       <Modal
@@ -412,9 +463,9 @@ export function OutputCard({ cfg, rt }: { cfg: SessionConfig; rt: SessionRuntime
       >
         <FormatEditor format={draft.format} profile={draft.profile} custom={draft.custom} onChange={(v) => setDraft(v)} />
       </Modal>
-    </div>
+    </SideCard>
   )
-}
+})
 
 const SCHEDULE_STATUS: Record<Schedule['status'], { key: MessageKey; cls: string }> = {
   upcoming: { key: 'schedule.upcoming', cls: 'is-busy' },
@@ -425,7 +476,7 @@ const SCHEDULE_STATUS: Record<Schedule['status'], { key: MessageKey; cls: string
   cancelled: { key: 'schedule.cancelled', cls: '' }
 }
 
-export function ScheduleCard() {
+export const ScheduleCard = memo(function ScheduleCard() {
   const t = useT()
   const locale = useApp((s) => s.locale)
   const sessions = useApp((s) => s.settings?.sessions ?? [])
@@ -436,18 +487,17 @@ export function ScheduleCard() {
   const save = (list: Schedule[]): void => void engine.saveSchedules(list)
 
   return (
-    <div className="card card-pad">
-      <div className="card-head">
-        <h2>{t('schedule.title')}</h2>
+    <SideCard
+      id="schedule"
+      title={t('schedule.title')}
+      actions={
         <Button size="sm" icon={Plus} onClick={() => setOpen(true)}>
           {t('schedule.new')}
         </Button>
-      </div>
-      <p className="field-desc">{t('schedule.onlyWhileOpen')}</p>
+      }
+    >
       {sorted.length === 0 ? (
-        <p className="faint" style={{ marginTop: 10 }}>
-          {t('schedule.empty')}
-        </p>
+        <p className="faint">{t('schedule.empty')}</p>
       ) : (
         <ul className="schedule-list">
           <AnimatePresence initial={false}>
@@ -480,9 +530,9 @@ export function ScheduleCard() {
         </ul>
       )}
       <ScheduleDialog open={open} onClose={() => setOpen(false)} />
-    </div>
+    </SideCard>
   )
-}
+})
 
 export function validateSchedule(
   draft: { sessionId: string; startAt: string; endAt: string },

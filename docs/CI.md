@@ -13,7 +13,8 @@ All type checks, tests, builds and packages run on GitHub Actions. You do not ne
 ### `build.yml`
 
 1. **Checks** (`ubuntu-22.04`): `npm ci` from the lockfile, pinned FFmpeg download (SHA-256 verified), `tsc` for the main and renderer projects, `vitest` (including real FFmpeg encodes), and the production build with `electron-vite`.
-2. **Package** matrix, one runner per OS and CPU architecture:
+2. **End-to-end** (`ubuntu-22.04`): downloads the Electron runtime, builds the app and runs `scripts/e2e.mjs` under `xvfb` with Chromium's fake audio input (`--use-fake-device-for-media-stream`, `--disable-audio-output`). Playwright drives the real app. Every screen is captured and uploaded as the `e2e-screenshots` artifact, and any renderer error fails the job.
+3. **Package** matrix, one runner per OS and CPU architecture:
 
    | Runner | Target | Output |
    | --- | --- | --- |
@@ -46,8 +47,8 @@ All type checks, tests, builds and packages run on GitHub Actions. You do not ne
 ## Making a release
 
 ```bash
-git tag 0.1.1
-git push origin 0.1.1
+git tag 0.2.0
+git push origin 0.2.0
 ```
 
 The tag is used exactly as written. Bump `version` in `package.json` and add `docs/release-notes/<tag>.md` before tagging a new version.

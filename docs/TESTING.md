@@ -20,6 +20,7 @@
 | User data kept across an update; installer/update configuration | `tests/update-data.test.ts` |
 | Developer settings (defaults, field-by-field fallback, no effect while off, reset, never imported paths/switches), Chromium start-up switches, whisper arguments, command quoting, log level filter and live log buffer, recovery of runs from a crashed recorder window, storage report and temporary-file cleanup, executable checks | `tests/developer.test.ts` |
 | Real encodes of WAV, FLAC (24-bit), MP3, OGG Opus and M4A AAC; trims; separate tracks; normalization; content-based import; copy/replace edits; export without overwriting | `tests/ffmpeg-integration.test.ts` (bundled FFmpeg) |
+| The real app end to end on a virtual display with a simulated microphone: first start with terms, keyboard recording, pause, marker and save, archive entry, side panel collapse/cards/resize, mini panel shortcuts (on and off), settings, About, developer page, update and consent dialogs, light/dark, Russian/English, persistence after a restart; any interface error fails | `scripts/e2e.mjs` (CI job "End-to-end test and screenshots", screenshots uploaded as an artifact) |
 | Required binaries inside every package, binaries run, CPU architecture, DMG/AppImage/DEB contents, update metadata, transcription smoke test | `scripts/verify-package.mjs` on each packaging runner |
 
 ## Not verifiable on CI runners

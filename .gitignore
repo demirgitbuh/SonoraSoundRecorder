@@ -12,3 +12,7 @@ build/icon.png
 resources/icons/*.png
 # Copied from LICENSE by scripts/prepare-resources.mjs
 build/license.txt
+# Rendered by scripts/prepare-resources.mjs
+build/installerSidebar.bmp
+build/installerHeader.bmp
+e2e-screenshots/

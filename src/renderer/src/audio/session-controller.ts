@@ -143,7 +143,7 @@ export class SessionController {
   private runId: string | null = null
   private frames = 0
   private markers: Marker[] = []
-  private lastUi = 0
+  private lastUiSecond = -1
   private countdownCancel: (() => void) | null = null
   private flushWaiter: ((frames: number) => void) | null = null
   private dataWaiter: (() => void) | null = null
@@ -351,9 +351,13 @@ export class SessionController {
           w()
         }
       }
-      if (now - this.lastUi > 200 && this.encoding && (this.state === 'recording' || this.state === 'paused')) {
-        this.lastUi = now
-        this.patch({ elapsedMs: this.elapsedMs, rawBytes: this.frames * 4 * this.encoding.channels * this.tracks.length })
+      // The clock shows whole seconds, so the interface is only updated when the second changes.
+      if (this.encoding && (this.state === 'recording' || this.state === 'paused')) {
+        const second = Math.floor(this.elapsedMs / 1000)
+        if (second !== this.lastUiSecond) {
+          this.lastUiSecond = second
+          this.patch({ elapsedMs: this.elapsedMs, rawBytes: this.frames * 4 * this.encoding.channels * this.tracks.length })
+        }
       }
     } else if (msg.type === 'data') {
       if (!this.sender) return
@@ -440,6 +444,7 @@ export class SessionController {
         const dev = effectiveDeveloper(settings.developer).audio
         this.sender = new ChunkSender(runId, dev.sendIntervalMs)
         this.frames = 0
+        this.lastUiSecond = -1
         this.markers = []
         this.live.reset()
         const dataArrived = new Promise<boolean>((resolve) => {

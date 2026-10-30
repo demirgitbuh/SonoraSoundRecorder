@@ -76,8 +76,8 @@ describe('packaging keeps user data safe across updates', () => {
     expect(builder).toMatch(/from: vendor\/bin\/\$\{os\}-\$\{arch\}/)
   })
 
-  it('ships version 0.1.1 under GPL-3.0', () => {
-    expect(pkg.version).toBe('0.1.1')
+  it('ships version 0.2.0 under GPL-3.0', () => {
+    expect(pkg.version).toBe('0.2.0')
     expect(pkg.license).toBe('GPL-3.0-only')
     expect(readFileSync(join(__dirname, '..', 'LICENSE'), 'utf8')).toContain('GNU GENERAL PUBLIC LICENSE')
   })
@@ -126,7 +126,7 @@ describe('user data survives an app update', () => {
     expect(s.language).toBe('ru')
     expect(s.theme).toBe('dark')
     expect(s.onboardingCompleted).toBe(true)
-    expect(s.shortcuts).toEqual({ scope: 'app', bindings: { toggleRecord: 'Control+R', togglePause: 'Control+P', addMarker: 'Control+M' } })
+    expect(s.shortcuts).toEqual({ scope: 'app', bindings: { toggleRecord: 'Control+R', togglePause: 'Control+P', addMarker: 'Control+M' }, miniPanel: true })
     expect(s.files).toEqual({ recordingsDir: '/srv/rec', layout: 'by-date' })
     expect(s.transcription.modelPath).toBe('/models/ggml-base.bin')
     expect(s.notifications.scope).toBe('errors')

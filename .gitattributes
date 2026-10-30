@@ -4,3 +4,5 @@
 *.icns binary
 *.wav binary
 *.woff2 binary
+*.woff binary
+*.bmp binary

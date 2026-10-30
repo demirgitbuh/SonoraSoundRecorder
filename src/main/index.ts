@@ -25,6 +25,7 @@ import { ShortcutService } from './services/shortcut-service'
 import { JsonFile } from './services/json-store'
 import { scheduleSchema } from '../shared/library-schema'
 import { bootFlagsFor } from './services/boot-flags'
+import { localizeSessionNames } from '../shared/sessions'
 import {
   capabilities,
   currentPlatform,
@@ -37,6 +38,9 @@ import {
 } from './services/platform'
 
 // ----------------------------------------------------------------------------- before ready
+// Unpackaged runs (tests, screenshots) can use an isolated data folder.
+if (!app.isPackaged && process.env.SONORA_USER_DATA) app.setPath('userData', process.env.SONORA_USER_DATA)
+
 // Chromium switches, including the developer ones, must be set before the app is ready.
 const platformFeatures = loopbackFeatureFlags()
 const appliedBoot = bootFlagsFor(app.getPath('userData'), platformFeatures)
@@ -56,6 +60,8 @@ if (!app.requestSingleInstanceLock()) {
 
 async function start(): Promise<void> {
   await app.whenReady()
+  // Started early and awaited only by the first bootstrap request, so it never delays the window.
+  const installerLangPromise = installerLocale()
   const userData = app.getPath('userData')
   const logger = new Logger(join(userData, 'logs'))
   logger.info('app', `Sonora ${app.getVersion()} on ${process.platform} ${process.arch} ${process.getSystemVersion()} (${detectInstallKind()}${isWayland() ? ', wayland' : ''})`)
@@ -66,6 +72,11 @@ async function start(): Promise<void> {
   const osTheme: ThemeName = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
   const settings = new SettingsStore(userData, logger)
   const loaded = await settings.load(osTheme)
+  // Automatic session names ("Session 1") always follow the interface language.
+  settings.setNormalizer((s) => {
+    const res = localizeSessionNames(s.sessions, s.language ?? systemLocale())
+    return res.changed ? { ...s, sessions: res.sessions } : s
+  })
   nativeTheme.themeSource = settings.value.theme
   if (loaded.firstRun) logger.info('app', `first run, theme ${osTheme}`)
   const dev = () => effectiveDeveloper(settings.value.developer)
@@ -104,7 +115,7 @@ async function start(): Promise<void> {
     recordingsDir: () => settings.value.files.recordingsDir,
     layout: () => settings.value.files.layout
   })
-  await library.load()
+  await library.load({ deferred: true })
 
   let windows: WindowManager | null = null
   const runs = new RunStore(join(userData, 'sessions'), logger, {
@@ -177,6 +188,7 @@ async function start(): Promise<void> {
     onFocusChange: (focused) => shortcuts.setAppFocused(focused),
     isQuitting: () => quitConfirmed,
     devToolsShortcut: () => settings.value.developer.enabled && settings.value.developer.ui.devToolsShortcut,
+    miniHandlesKeys: () => settings.value.shortcuts.miniPanel,
     onMainRendererGone: async () => {
       // The recorder lost its audio graph: close its runs so they are offered as recovered recordings.
       await runs.endAll(true)
@@ -236,7 +248,6 @@ async function start(): Promise<void> {
     quit: () => void requestQuit()
   })
 
-  const installerLang = await installerLocale()
 
   async function requestQuit(): Promise<void> {
     if (quitConfirmed) {
@@ -306,12 +317,12 @@ async function start(): Promise<void> {
     t,
     systemTheme: () => osTheme,
     defaultRecordingsDir: () => join(app.getPath('music'), 'Sonora Recordings'),
-    bootstrap: (): BootstrapData => ({
+    bootstrap: async (): Promise<BootstrapData> => ({
       settings: settings.value,
       capabilities: capabilities({ ffmpeg: ffmpeg.available, whisper: transcription.available }),
       version: app.getVersion(),
       systemLocale: systemLocale(),
-      installerLocale: installerLang,
+      installerLocale: await installerLangPromise,
       systemTheme: osTheme,
       defaultRecordingsDir: join(app.getPath('music'), 'Sonora Recordings'),
       dataDir: userData
@@ -396,7 +407,9 @@ async function start(): Promise<void> {
     if (s.launchAtLogin !== prev.launchAtLogin || s.startHiddenAtLogin !== prev.startHiddenAtLogin) {
       void setAutostart(s.launchAtLogin, s.startHiddenAtLogin, logger)
     }
-    if (JSON.stringify(s.shortcuts) !== JSON.stringify(prev.shortcuts)) shortcuts.apply(s.shortcuts.bindings, s.shortcuts.scope)
+    if (s.shortcuts.scope !== prev.shortcuts.scope || JSON.stringify(s.shortcuts.bindings) !== JSON.stringify(prev.shortcuts.bindings)) {
+      shortcuts.apply(s.shortcuts.bindings, s.shortcuts.scope)
+    }
     const nextDev = effectiveDeveloper(s.developer)
     const prevDev = effectiveDeveloper(prev.developer)
     if (nextDev.logging.level !== prevDev.logging.level) logger.setLevel(nextDev.logging.level)
@@ -420,6 +433,8 @@ async function start(): Promise<void> {
   win.createMain(!loginLaunch)
   tray.create()
   if (settings.value.miniPanel.open) win.setMini(true)
+  // Transcript search index and the missing-file check run after the window is up.
+  setTimeout(() => void library.warmUp().catch((err) => logger.warn('library', `warm-up failed: ${(err as Error).message}`)), 1200)
 
   app.on('second-instance', () => win.showMain(null))
   app.on('activate', () => win.showMain(null))

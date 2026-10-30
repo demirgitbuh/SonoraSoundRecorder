@@ -38,10 +38,7 @@ export function TrashPage() {
   return (
     <div className="trash-page">
       <div className="page-head">
-        <div>
-          <h1>{t('nav.trash')}</h1>
-          <p className="muted">{t('trash.subtitle')}</p>
-        </div>
+        <h1>{t('nav.trash')}</h1>
         {items.length > 0 && (
           <Button variant="danger" icon={Trash2} onClick={() => setConfirm({ ids: items.map((r) => r.id), all: true })}>
             {t('trash.empty')}
@@ -52,7 +49,6 @@ export function TrashPage() {
         <div className="empty">
           <EmptyTrashArt />
           <h3>{t('trash.emptyTitle')}</h3>
-          <p>{t('trash.emptyBody')}</p>
         </div>
       ) : (
         <ul className="trash-list">

@@ -44,6 +44,7 @@ export class TrayManager {
   private tray: Tray | null = null
   private snapshot: EngineSnapshot = { sessions: [], selectedId: null, unsavedPreviews: 0 }
   private lastMenuKey = ''
+  private lastIconRecording: boolean | null = null
   private icons: { idle: NativeImage; recording: NativeImage } | null = null
 
   constructor(private readonly deps: Deps) {}
@@ -147,7 +148,11 @@ export class TrayManager {
     ]
     this.tray.setContextMenu(Menu.buildFromTemplate(template))
     this.tray.setToolTip(`Sonora Sound Recorder — ${statusLine}`)
-    if (this.icons && process.platform !== 'darwin') this.tray.setImage(anyRecording ? this.icons.recording : this.icons.idle)
+    // The icon only changes when recording starts or ends, not with every tick of the clock.
+    if (this.icons && process.platform !== 'darwin' && (force || this.lastIconRecording !== anyRecording)) {
+      this.tray.setImage(anyRecording ? this.icons.recording : this.icons.idle)
+    }
+    this.lastIconRecording = anyRecording
     if (process.platform === 'darwin') this.tray.setTitle(anyRecording && elapsed ? ` ${state === 'paused' ? '❚❚' : '●'} ${elapsed}` : '')
   }
 

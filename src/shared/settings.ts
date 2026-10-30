@@ -42,6 +42,13 @@ export const sessionConfigSchema = z.object({
   custom: customEncodingSchema
 })
 
+/** Width limits of the record page's side panel, in CSS pixels. */
+export const SIDE_PANEL_MIN = 280
+export const SIDE_PANEL_MAX = 560
+export const SIDE_PANEL_DEFAULT = 360
+export const RECORD_CARDS = ['levels', 'source', 'output', 'schedule'] as const
+export type RecordCard = (typeof RECORD_CARDS)[number]
+
 const bindingSchema = (fallback: string): z.ZodCatch<z.ZodString> => z.string().min(1).max(64).catch(fallback)
 
 export const settingsSchema = z.object({
@@ -102,9 +109,11 @@ export const settingsSchema = z.object({
           togglePause: bindingSchema(DEFAULT_BINDINGS.togglePause),
           addMarker: bindingSchema(DEFAULT_BINDINGS.addMarker)
         })
-        .catch({ ...DEFAULT_BINDINGS })
+        .catch(() => ({ ...DEFAULT_BINDINGS })),
+      /** The mini panel handles the recording shortcuts itself while it has focus. */
+      miniPanel: z.boolean().catch(true)
     })
-    .catch({ scope: 'global', bindings: { ...DEFAULT_BINDINGS } }),
+    .catch(() => ({ scope: 'global' as const, bindings: { ...DEFAULT_BINDINGS }, miniPanel: true })),
   notifications: z
     .object({
       desktop: z.boolean().catch(true),
@@ -152,6 +161,19 @@ export const settingsSchema = z.object({
       maximized: z.boolean().catch(false)
     })
     .catch({ width: null, height: null, x: null, y: null, maximized: false }),
+  layout: z
+    .object({
+      sidePanelWidth: z.number().int().min(SIDE_PANEL_MIN).max(SIDE_PANEL_MAX).catch(SIDE_PANEL_DEFAULT),
+      sidePanelCollapsed: z.boolean().catch(false),
+      collapsedCards: z.array(z.enum(RECORD_CARDS)).max(RECORD_CARDS.length).catch([])
+    })
+    .catch(() => ({ sidePanelWidth: SIDE_PANEL_DEFAULT, sidePanelCollapsed: false, collapsedCards: [] })),
+  legal: z
+    .object({
+      acceptedVersion: z.string().max(40).nullable().catch(null),
+      acceptedAt: z.string().max(40).nullable().catch(null)
+    })
+    .catch(() => ({ acceptedVersion: null, acceptedAt: null })),
   developer: developerSchema
 })
 
@@ -318,6 +340,7 @@ export function resetCategory(current: Settings, category: SettingsCategory, sys
       s.uiScale = d.uiScale
       s.highContrast = d.highContrast
       s.reduceMotion = d.reduceMotion
+      s.layout = d.layout
       break
     case 'notifications':
       s.notifications = d.notifications
@@ -346,11 +369,12 @@ export function resetAll(current: Settings, systemTheme: ThemeName): Settings {
   d.files.recordingsDir = current.files.recordingsDir
   d.transcription.modelPath = current.transcription.modelPath
   d.window = current.window
+  d.legal = current.legal
   return d
 }
 
 /** Settings that make sense to move between profiles and computers. */
-export type PortableSettings = Omit<Settings, 'onboardingCompleted' | 'window' | 'miniPanel' | 'selectedSessionId' | 'schemaVersion'>
+export type PortableSettings = Omit<Settings, 'onboardingCompleted' | 'window' | 'miniPanel' | 'selectedSessionId' | 'schemaVersion' | 'legal'>
 
 export function toPortable(s: Settings): PortableSettings {
   const copy: Partial<Settings> = structuredClone(s)
@@ -359,6 +383,7 @@ export function toPortable(s: Settings): PortableSettings {
   delete copy.miniPanel
   delete copy.selectedSessionId
   delete copy.schemaVersion
+  delete copy.legal
   return copy as PortableSettings
 }
 
@@ -380,7 +405,7 @@ const exportFileSchema = z.object({
   schemaVersion: z.number().int().min(0),
   exportedAt: z.string(),
   appVersion: z.string(),
-  settings: z.record(z.unknown())
+  settings: z.record(z.string(), z.unknown())
 })
 
 export interface ParsedImport {
@@ -430,6 +455,7 @@ export function mergeImported(current: Settings, imported: Settings, accepted: M
     onboardingCompleted: current.onboardingCompleted,
     window: current.window,
     miniPanel: current.miniPanel,
+    legal: current.legal,
     schemaVersion: SETTINGS_SCHEMA_VERSION
   }
   if (!accepted.includes('files.recordingsDir')) next.files.recordingsDir = current.files.recordingsDir
@@ -480,7 +506,7 @@ export const profilesFileSchema = z.object({
         id: z.string().min(1).max(64),
         name: z.string().min(1).max(60),
         createdAt: z.string(),
-        settings: z.record(z.unknown())
+        settings: z.record(z.string(), z.unknown())
       })
     )
     .catch([])

@@ -45,7 +45,7 @@ export interface AppContext {
   t: (key: MessageKey, params?: TranslateParams) => string
   systemTheme: () => ThemeName
   defaultRecordingsDir: () => string
-  bootstrap: () => BootstrapData
+  bootstrap: () => Promise<BootstrapData>
   notify: (req: NotifyRequest) => void
   dispatch: (cmd: EngineCommand) => void
   engineSnapshot: () => EngineSnapshot

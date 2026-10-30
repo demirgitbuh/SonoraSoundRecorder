@@ -21,6 +21,8 @@ export class Logger {
   private seq = 0
   private readonly recentEntries: LogEntry[] = []
   private readonly listeners = new Set<(entry: LogEntry) => void>()
+  /** Size of the current log file, tracked in memory so writing never has to stat the file. */
+  private size: number | null = null
 
   constructor(private readonly dir: string) {
     mkdirSync(dir, { recursive: true })
@@ -85,6 +87,7 @@ export class Logger {
     try {
       this.rotateIfNeeded()
       appendFileSync(this.file, line, 'utf8')
+      this.size = (this.size ?? 0) + Buffer.byteLength(line)
     } catch {
       // Logging must never break the app.
     }
@@ -104,8 +107,9 @@ export class Logger {
   }
 
   private rotateIfNeeded(): void {
-    if (!existsSync(this.file)) return
-    if (statSync(this.file).size < MAX_FILE_BYTES) return
+    if (this.size === null) this.size = existsSync(this.file) ? statSync(this.file).size : 0
+    if (this.size < MAX_FILE_BYTES) return
+    this.size = 0
     const oldest = join(this.dir, `sonora.${MAX_FILES - 1}.log`)
     if (existsSync(oldest)) unlinkSync(oldest)
     for (let i = MAX_FILES - 2; i >= 1; i--) {

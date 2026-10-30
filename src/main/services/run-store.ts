@@ -70,6 +70,8 @@ interface ActiveRun {
   tracks: Map<TrackKind, TrackWriter>
   timer: NodeJS.Timeout
   failed: boolean
+  /** The manifest changed (state, markers) and must be rewritten at the next sync. */
+  manifestDirty: boolean
 }
 
 export interface RunStoreOptions {
@@ -167,6 +169,7 @@ export class RunStore {
       manifest,
       tracks,
       failed: false,
+      manifestDirty: false,
       timer: setInterval(() => void this.sync(init.runId), this.syncInterval())
     }
     run.timer.unref?.()
@@ -244,8 +247,12 @@ export class RunStore {
         await writer.fh.datasync()
         await writer.peaksFh.datasync()
       }
-      run.manifest.updatedAt = new Date().toISOString()
-      await writeFileAtomic(join(run.dir, 'manifest.json'), JSON.stringify(run.manifest, null, 2))
+      // The audio itself needs no manifest update; it is only rewritten when it changed.
+      if (run.manifestDirty) {
+        run.manifestDirty = false
+        run.manifest.updatedAt = new Date().toISOString()
+        await writeFileAtomic(join(run.dir, 'manifest.json'), JSON.stringify(run.manifest, null, 2))
+      }
     } catch (err) {
       this.fail(runId, run, err as Error)
     }
@@ -257,6 +264,7 @@ export class RunStore {
     if (patch.state) run.manifest.state = patch.state
     if (patch.pauseReason !== undefined) run.manifest.pauseReason = patch.pauseReason
     if (patch.markers) run.manifest.markers = patch.markers.map((m) => ({ id: m.id, timeMs: Math.max(0, m.timeMs) }))
+    run.manifestDirty = true
     await this.sync(runId)
   }
 

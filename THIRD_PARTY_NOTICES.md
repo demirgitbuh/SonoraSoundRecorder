@@ -17,6 +17,7 @@ this file.
 | [Zod](https://zod.dev/) | Data validation | MIT |
 | [electron-updater](https://www.electron.build/auto-update) | Installer updates (NSIS, AppImage) | MIT |
 | [Inter](https://rsms.me/inter/) via @fontsource-variable/inter | Bundled typeface | SIL Open Font License 1.1 |
+| [Instrument Serif](https://github.com/Instrument/instrument-serif) | Bundled display typeface (headings, timer) | SIL Open Font License 1.1 — `licenses/OFL-InstrumentSerif.txt` |
 
 Speech recognition models are **not** bundled. Models you select (for example the official
 whisper.cpp GGML conversions of OpenAI Whisper, MIT licensed) remain under their own licenses.

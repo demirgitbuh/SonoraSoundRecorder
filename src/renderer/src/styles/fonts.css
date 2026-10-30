@@ -1,0 +1,38 @@
+/*
+ * Instrument Serif (SIL OFL 1.1) is the display face: page titles, the recording clock, dialog
+ * and onboarding headlines. Interface text stays in Inter. The face covers Latin only, so Russian
+ * and Chinese use Inter for display text as well (see the :lang rules below).
+ */
+@font-face {
+  font-family: 'Instrument Serif';
+  src: url('../assets/fonts/InstrumentSerif-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0000-024F, U+0259, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+1E00-1EFF, U+2000-206F, U+20AC, U+2122, U+2212;
+}
+
+@font-face {
+  font-family: 'Instrument Serif';
+  src: url('../assets/fonts/InstrumentSerif-Italic.woff') format('woff');
+  font-weight: 400;
+  font-style: italic;
+  font-display: block;
+  unicode-range: U+0000-024F, U+0259, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+1E00-1EFF, U+2000-206F, U+20AC, U+2122, U+2212;
+}
+
+:root {
+  --font-display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --display-weight: 400;
+  --display-tracking: -0.005em;
+  /* Inter needs a smaller size than the serif for the same visual weight. */
+  --display-scale: 1;
+}
+
+:root:lang(ru),
+:root:lang(zh) {
+  --font-display: var(--font);
+  --display-weight: 650;
+  --display-tracking: -0.025em;
+  --display-scale: 0.8;
+}

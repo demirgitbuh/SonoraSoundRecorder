@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { activeFilterCount, queryRecordings, textMatch } from '../../../shared/search'
 import type { SortDir, SortKey } from '../../../shared/search'
@@ -88,7 +88,8 @@ function SourceLabel({ rec }: { rec: Recording }) {
   )
 }
 
-function RecordingItem({ rec, view, matchSource }: { rec: Recording; view: 'list' | 'cards'; matchSource: string | null }) {
+/** One archive entry. Memoized, so a change to one recording does not re-render the whole list. */
+const RecordingItem = memo(function RecordingItem({ rec, view, matchSource, animate }: { rec: Recording; view: 'list' | 'cards'; matchSource: string | null; animate: boolean }) {
   const t = useT()
   const locale = useApp((s) => s.locale)
   const showWaves = useApp((s) => s.settings?.archive.showWaveforms ?? true)
@@ -105,8 +106,8 @@ function RecordingItem({ rec, view, matchSource }: { rec: Recording; view: 'list
 
   return (
     <motion.li
-      layout="position"
-      initial={{ opacity: 0, y: 6 }}
+      layout={animate ? 'position' : false}
+      initial={animate ? { opacity: 0, y: 6 } : false}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.98 }}
       transition={{ duration: 0.18 }}
@@ -182,7 +183,7 @@ function RecordingItem({ rec, view, matchSource }: { rec: Recording; view: 'list
       </button>
     </motion.li>
   )
-}
+})
 
 const SORTS: Array<{ id: string; key: SortKey; dir: SortDir; label: MessageKey }> = [
   { id: 'date-desc', key: 'date', dir: 'desc', label: 'sort.newest' },
@@ -532,19 +533,17 @@ export function ArchivePage({ mode }: { mode: 'all' | 'favorites' }) {
           <div className="empty">
             {mode === 'favorites' ? <EmptyFavoritesArt /> : <EmptyArchiveArt />}
             <h3>{mode === 'favorites' ? t('archive.emptyFavoritesTitle') : t('archive.emptyTitle')}</h3>
-            <p>{mode === 'favorites' ? t('archive.emptyFavoritesBody') : t('archive.emptyBody')}</p>
           </div>
         ) : list.length === 0 ? (
           <div className="empty">
             <EmptySearchArt />
             <h3>{t('archive.noMatchTitle')}</h3>
-            <p>{t('archive.noMatchBody')}</p>
           </div>
         ) : (
           <ul className={`rec-list ${view}`} aria-label={t('archive.listLabel')}>
             <AnimatePresence initial={false}>
               {list.map((rec) => (
-                <RecordingItem key={rec.id} rec={rec} view={view} matchSource={q.text ? textMatch(rec, q.text, ctx) : null} />
+                <RecordingItem key={rec.id} rec={rec} view={view} matchSource={q.text ? textMatch(rec, q.text, ctx) : null} animate={list.length <= 60} />
               ))}
             </AnimatePresence>
           </ul>
@@ -558,7 +557,6 @@ export function ArchivePage({ mode }: { mode: 'all' | 'favorites' }) {
             <div className="drop-card">
               <Upload size={28} strokeWidth={ICON_STROKE} aria-hidden="true" />
               <strong>{t('archive.dropTitle')}</strong>
-              <span className="muted">{t('archive.dropBody')}</span>
             </div>
           </motion.div>
         )}

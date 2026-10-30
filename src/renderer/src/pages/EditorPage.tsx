@@ -526,11 +526,11 @@ export function EditorPage({ source }: { source: EditorSource }) {
               {t('editor.playSelection')}
             </Button>
           </div>
-          <p className="field-desc" style={{ marginTop: 10 }}>
-            {selection
-              ? t('editor.selectionInfo', { start: formatPrecise(selection.startMs), end: formatPrecise(selection.endMs), length: formatPrecise(selection.endMs - selection.startMs) })
-              : t('editor.selectHint')}
-          </p>
+          {selection && (
+            <p className="field-desc tnum" style={{ marginTop: 10 }}>
+              {t('editor.selectionInfo', { start: formatPrecise(selection.startMs), end: formatPrecise(selection.endMs), length: formatPrecise(selection.endMs - selection.startMs) })}
+            </p>
+          )}
           <div className="row nowrap" style={{ marginTop: 12 }}>
             <Switch checked={previewEdits} label={t('editor.previewEdits')} onChange={setPreviewEdits} />
             <span>{t('editor.previewEdits')}</span>

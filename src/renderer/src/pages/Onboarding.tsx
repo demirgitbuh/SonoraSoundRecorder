@@ -1,18 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import type { Variants } from 'framer-motion'
+import { LEGAL_VERSION, legalDoc } from '../../../shared/legal'
+import type { LegalDocId } from '../../../shared/legal'
 import { LOCALES, LOCALE_NATIVE_NAMES } from '../../../shared/types'
 import type { FolderCheck, Locale, PermissionStatus, SourceKind } from '../../../shared/types'
 import { acceleratorKeycaps } from '../../../shared/shortcuts'
 import { AppError, invoke, platform } from '../api'
 import { engine } from '../audio/engine'
 import { Button, Keycaps, Logo, Notice, Segmented } from '../components/controls'
-import { ArrowLeft, Check, FolderOpen, ICON_STROKE, Mic, MonitorSpeaker } from '../components/icons'
+import { ArrowLeft, ArrowRight, Check, FolderOpen, ICON_STROKE, Mic, MonitorSpeaker } from '../components/icons'
 import { OkPill, WarnPill } from '../components/status'
+import { WaveArt } from '../components/wave-art'
 import { useT } from '../i18n'
 import type { MessageKey } from '../i18n'
 import { useApp } from '../stores/app'
 import { useDevices } from '../stores/devices'
 import { formatBytes } from '../util/format'
+import { LegalModal } from './Legal'
 import { ShortcutEditor } from './ShortcutEditor'
 
 const STEPS: MessageKey[] = [
@@ -23,6 +29,50 @@ const STEPS: MessageKey[] = [
   'onboarding.step.shortcuts',
   'onboarding.step.summary'
 ]
+
+const EASE = [0.22, 1, 0.36, 1] as const
+
+/** Children of a step enter one after another. */
+const stagger: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.055, delayChildren: 0.04 } }
+}
+const rise: Variants = {
+  hidden: { opacity: 0, y: 10 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.22, ease: EASE } }
+}
+
+function Step({ index, title, children, actions }: { index: number; title: string; children: ReactNode; actions: ReactNode }) {
+  return (
+    <motion.div className="onb-step" variants={stagger} initial="hidden" animate="show">
+      <motion.span className="onb-count tnum" variants={rise}>
+        {String(index + 1).padStart(2, '0')} / {String(STEPS.length).padStart(2, '0')}
+      </motion.span>
+      <motion.h1 variants={rise}>{title}</motion.h1>
+      {children}
+      <motion.div className="onb-actions" variants={rise}>
+        {actions}
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function Rise({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <motion.div variants={rise} className={className}>
+      {children}
+    </motion.div>
+  )
+}
+
+function NextButton({ onClick, disabled, label }: { onClick: () => void; disabled?: boolean; label: string }) {
+  return (
+    <Button variant="primary" size="lg" className="onb-next" disabled={disabled} onClick={onClick}>
+      {label}
+      <ArrowRight size={17} strokeWidth={ICON_STROKE} aria-hidden="true" />
+    </Button>
+  )
+}
 
 function LanguageStep({ onDone }: { onDone: () => void }) {
   const t = useT()
@@ -35,24 +85,26 @@ function LanguageStep({ onDone }: { onDone: () => void }) {
     await update({ language: l })
   }
   return (
-    <div className="onb-step">
-      <h1>{t('onboarding.language.title')}</h1>
-      <p className="muted">{t('onboarding.language.body')}</p>
-      <div className="language-grid" role="radiogroup" aria-label={t('onboarding.language.title')}>
+    <Step index={0} title={t('onboarding.language.title')} actions={<NextButton disabled={!chosen} onClick={onDone} label={t('common.continue')} />}>
+      <motion.div className="language-grid" role="radiogroup" aria-label={t('onboarding.language.title')} variants={stagger}>
         {LOCALES.map((l) => (
-          <button key={l} type="button" role="radio" aria-checked={chosen === l} lang={l} className={`language-option ${chosen === l ? 'selected' : ''}`} onClick={() => void choose(l)}>
+          <motion.button
+            key={l}
+            type="button"
+            role="radio"
+            aria-checked={chosen === l}
+            lang={l}
+            className={`language-option ${chosen === l ? 'selected' : ''}`}
+            onClick={() => void choose(l)}
+            variants={rise}
+          >
             <span className="language-name">{LOCALE_NATIVE_NAMES[l]}</span>
             {l === suggested && !chosen && <span className="badge">{t('onboarding.language.suggested')}</span>}
             {chosen === l && <Check size={18} strokeWidth={2} aria-hidden="true" />}
-          </button>
+          </motion.button>
         ))}
-      </div>
-      <div className="onb-actions">
-        <Button variant="primary" size="lg" disabled={!chosen} onClick={onDone}>
-          {t('common.continue')}
-        </Button>
-      </div>
-    </div>
+      </motion.div>
+    </Step>
   )
 }
 
@@ -66,7 +118,11 @@ function FolderStep({ onDone }: { onDone: () => void }) {
   const [check, setCheck] = useState<FolderCheck | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    void invoke('files:check-folder', dir).then(setCheck)
+    let alive = true
+    void invoke('files:check-folder', dir).then((c) => alive && setCheck(c))
+    return () => {
+      alive = false
+    }
   }, [dir])
   const use = async (): Promise<void> => {
     try {
@@ -77,10 +133,12 @@ function FolderStep({ onDone }: { onDone: () => void }) {
     }
   }
   return (
-    <div className="onb-step">
-      <h1>{t('onboarding.folder.title')}</h1>
-      <p className="muted">{t('onboarding.folder.body')}</p>
-      <div className="card card-pad folder-box">
+    <Step
+      index={1}
+      title={t('onboarding.folder.title')}
+      actions={<NextButton disabled={!!check && check.exists && !check.writable} onClick={() => void use()} label={t('onboarding.folder.use')} />}
+    >
+      <Rise className="card card-pad folder-box">
         <FolderOpen size={20} strokeWidth={ICON_STROKE} aria-hidden="true" />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="truncate strong" title={dir}>
@@ -104,15 +162,9 @@ function FolderStep({ onDone }: { onDone: () => void }) {
         >
           {t('onboarding.folder.choose')}
         </Button>
-      </div>
-      <p className="field-desc">{t('onboarding.folder.later')}</p>
+      </Rise>
       {error && <Notice kind="error">{t(error as MessageKey)}</Notice>}
-      <div className="onb-actions">
-        <Button variant="primary" size="lg" disabled={!!check && check.exists && !check.writable} onClick={() => void use()}>
-          {t('onboarding.folder.use')}
-        </Button>
-      </div>
-    </div>
+    </Step>
   )
 }
 
@@ -137,33 +189,35 @@ function PermissionsStep({ onDone }: { onDone: () => void }) {
     setPerm(await invoke('permissions:status'))
   }
   const micOk = tested === 'ok' || perm?.microphone === 'granted'
+  const micDenied = tested === 'denied' || perm?.microphone === 'denied'
   return (
-    <div className="onb-step">
-      <h1>{t('onboarding.permissions.title')}</h1>
-      <p className="muted">{t('onboarding.permissions.body')}</p>
-      <div className="card card-pad stack">
-        <div className="row nowrap">
+    <Step index={2} title={t('onboarding.permissions.title')} actions={<NextButton onClick={onDone} label={t('common.continue')} />}>
+      <Rise className="card card-pad onb-perm">
+        <span className="onb-perm-icon">
           <Mic size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
-          <strong>{t('permissions.microphone')}</strong>
-          <div className="spacer" />
-          {micOk ? <OkPill>{t('permissions.granted')}</OkPill> : tested === 'denied' || perm?.microphone === 'denied' ? <WarnPill>{t('permissions.denied')}</WarnPill> : null}
+        </span>
+        <strong className="onb-perm-name">{t('permissions.microphone')}</strong>
+        <div className="onb-perm-state">
+          {micOk ? <OkPill>{t('permissions.granted')}</OkPill> : micDenied ? <WarnPill>{t('permissions.denied')}</WarnPill> : null}
         </div>
-        <p className="field-desc">{t(`permissions.desc.${caps.platform}` as MessageKey)}</p>
-        <div className="row">
-          <Button onClick={() => void test()}>{micOk ? t('permissions.testAgain') : t('permissions.allowMic')}</Button>
-          {(tested === 'denied' || perm?.microphone === 'denied') && caps.platform !== 'linux' && (
-            <Button variant="ghost" onClick={() => void invoke('permissions:open-settings', 'microphone')}>
+        <div className="row onb-perm-actions">
+          <Button size="sm" onClick={() => void test()}>
+            {micOk ? t('permissions.testAgain') : t('permissions.allowMic')}
+          </Button>
+          {micDenied && caps.platform !== 'linux' && (
+            <Button size="sm" variant="ghost" onClick={() => void invoke('permissions:open-settings', 'microphone')}>
               {t('permissions.openSettings')}
             </Button>
           )}
         </div>
-        {tested === 'error' && <Notice kind="error">{t('capture.errorMicGeneric')}</Notice>}
-      </div>
-      <div className="card card-pad stack">
-        <div className="row nowrap">
+      </Rise>
+      {tested === 'error' && <Notice kind="error">{t('capture.errorMicGeneric')}</Notice>}
+      <Rise className="card card-pad onb-perm">
+        <span className="onb-perm-icon">
           <MonitorSpeaker size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
-          <strong>{t('permissions.systemAudio')}</strong>
-          <div className="spacer" />
+        </span>
+        <strong className="onb-perm-name">{t('permissions.systemAudio')}</strong>
+        <div className="onb-perm-state">
           {caps.systemAudio.status === 'supported' ? (
             <OkPill>{t('platform.available')}</OkPill>
           ) : caps.systemAudio.status === 'needs-permission' ? (
@@ -172,20 +226,15 @@ function PermissionsStep({ onDone }: { onDone: () => void }) {
             <WarnPill>{t('platform.unavailable')}</WarnPill>
           )}
         </div>
-        <p className="field-desc">{t(`platform.systemAudio.${caps.systemAudio.method}` as MessageKey)}</p>
-        {caps.isWayland && <p className="field-desc">{t('platform.waylandPortal')}</p>}
         {caps.systemAudio.status === 'needs-permission' && (
-          <div className="row">
-            <Button onClick={() => void invoke('permissions:open-settings', 'screen')}>{t('permissions.openSettings')}</Button>
+          <div className="row onb-perm-actions">
+            <Button size="sm" onClick={() => void invoke('permissions:open-settings', 'screen')}>
+              {t('permissions.openSettings')}
+            </Button>
           </div>
         )}
-      </div>
-      <div className="onb-actions">
-        <Button variant="primary" size="lg" onClick={onDone}>
-          {t('common.continue')}
-        </Button>
-      </div>
-    </div>
+      </Rise>
+    </Step>
   )
 }
 
@@ -237,7 +286,6 @@ function MicTest({ deviceId }: { deviceId: string | null }) {
         <Button size="sm" onClick={() => setState(state === 'on' ? 'off' : 'on')}>
           {state === 'on' ? t('onboarding.source.stopTest') : t('onboarding.source.test')}
         </Button>
-        {state === 'on' && <span className="faint">{t('onboarding.source.speak')}</span>}
       </div>
       {state === 'on' && (
         <div className="meter-track" style={{ height: 10 }}>
@@ -258,11 +306,8 @@ function SourceStep({ onDone }: { onDone: () => void }) {
   const sysUnsupported = caps.systemAudio.status === 'unsupported'
   const source = settings.recording.defaultSource
   return (
-    <div className="onb-step">
-      <h1>{t('onboarding.source.title')}</h1>
-      <p className="muted">{t('onboarding.source.body')}</p>
-      <div className="card card-pad stack">
-        <span className="eyebrow">{t('settings.recording.defaultSource')}</span>
+    <Step index={3} title={t('onboarding.source.title')} actions={<NextButton onClick={onDone} label={t('common.continue')} />}>
+      <Rise className="card card-pad stack">
         <Segmented<SourceKind>
           label={t('settings.recording.defaultSource')}
           value={source}
@@ -289,65 +334,61 @@ function SourceStep({ onDone }: { onDone: () => void }) {
             <MicTest deviceId={settings.audio.defaultMicDeviceId} />
           </>
         )}
-      </div>
-      <div className="onb-actions">
-        <Button variant="primary" size="lg" onClick={onDone}>
-          {t('common.continue')}
-        </Button>
-      </div>
-    </div>
+      </Rise>
+    </Step>
   )
 }
 
 function ShortcutsStep({ onDone }: { onDone: () => void }) {
   const t = useT()
   return (
-    <div className="onb-step">
-      <h1>{t('onboarding.shortcuts.title')}</h1>
-      <p className="muted">{t('onboarding.shortcuts.body')}</p>
-      <div className="card card-pad">
+    <Step index={4} title={t('onboarding.shortcuts.title')} actions={<NextButton onClick={onDone} label={t('common.continue')} />}>
+      <Rise className="card card-pad">
         <ShortcutEditor />
-      </div>
-      <div className="onb-actions">
-        <Button variant="primary" size="lg" onClick={onDone}>
-          {t('common.continue')}
-        </Button>
-      </div>
-    </div>
+      </Rise>
+    </Step>
   )
 }
 
 function SummaryStep() {
   const t = useT()
+  const locale = useApp((s) => s.locale)
   const settings = useApp((s) => s.settings)!
   const update = useApp((s) => s.updateSettings)
   const inputs = useDevices((s) => s.inputs)
   const [busy, setBusy] = useState(false)
+  const [agreed, setAgreed] = useState(false)
+  const [legal, setLegal] = useState<LegalDocId | null>(null)
   const space = t('keys.space')
   const mic = inputs.find((d) => d.deviceId === settings.audio.defaultMicDeviceId)?.label || t('devices.systemDefault')
   const finish = async (): Promise<void> => {
     setBusy(true)
-    const first = settings.sessions[0]
-    const sessions = settings.sessions.map((s) =>
-      s.id === first?.id ? { ...s, source: settings.recording.defaultSource, micDeviceId: settings.audio.defaultMicDeviceId } : s
-    )
-    await update({ onboardingCompleted: true, sessions })
-    engine.start()
+    try {
+      const first = settings.sessions[0]
+      const sessions = settings.sessions.map((s) =>
+        s.id === first?.id ? { ...s, source: settings.recording.defaultSource, micDeviceId: settings.audio.defaultMicDeviceId } : s
+      )
+      await update({ onboardingCompleted: true, sessions, legal: { acceptedVersion: LEGAL_VERSION, acceptedAt: new Date().toISOString() } })
+      engine.start()
+    } finally {
+      setBusy(false)
+    }
   }
   const rows: Array<[MessageKey, string]> = [
     ['settings.general.language', LOCALE_NATIVE_NAMES[settings.language ?? 'en']],
     ['settings.files.folder', settings.files.recordingsDir ?? '—'],
     ['settings.recording.defaultSource', t(settings.recording.defaultSource === 'mic' ? 'source.mic' : settings.recording.defaultSource === 'system' ? 'source.system' : 'source.both')],
     ['record.micDevice', mic],
-    ['settings.recording.after', t('settings.recording.afterPreview')],
     ['onboarding.summary.format', 'WAV · 48 kHz · ' + t('audio.stereo') + ' · 24-bit'],
     ['shortcuts.scope', settings.shortcuts.scope === 'global' ? t('shortcuts.scopeGlobal') : t('shortcuts.scopeApp')]
   ]
   return (
-    <div className="onb-step">
-      <h1>{t('onboarding.summary.title')}</h1>
-      <p className="muted">{t('onboarding.summary.body')}</p>
-      <div className="card card-pad">
+    <Step
+      index={5}
+      title={t('onboarding.summary.title')}
+      actions={<NextButton disabled={busy || !agreed} onClick={() => void finish()} label={t('onboarding.finish')} />}
+    >
+      <Rise className="card card-pad">
         <dl className="meta-list">
           {rows.map(([k, v]) => (
             <div key={k}>
@@ -364,14 +405,23 @@ function SummaryStep() {
             </dd>
           </div>
         </dl>
-      </div>
-      <p className="field-desc">{t('onboarding.summary.later')}</p>
-      <div className="onb-actions">
-        <Button variant="primary" size="lg" disabled={busy} onClick={() => void finish()}>
-          {t('onboarding.finish')}
-        </Button>
-      </div>
-    </div>
+      </Rise>
+      <Rise className="onb-legal">
+        <label className="checkbox">
+          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+          <span>{t('legal.agree')}</span>
+        </label>
+        <div className="onb-legal-links">
+          <button type="button" className="link-btn" onClick={() => setLegal('terms')}>
+            {legalDoc(locale, 'terms').title}
+          </button>
+          <button type="button" className="link-btn" onClick={() => setLegal('privacy')}>
+            {legalDoc(locale, 'privacy').title}
+          </button>
+        </div>
+      </Rise>
+      <LegalModal open={legal !== null} initial={legal ?? 'terms'} onClose={() => setLegal(null)} />
+    </Step>
   )
 }
 
@@ -396,25 +446,34 @@ export function Onboarding() {
   return (
     <div className="onboarding">
       <aside className="onb-rail">
-        <div className="row nowrap onb-brand">
-          <Logo size={36} />
-          <div>
-            <strong>Sonora</strong>
-            <div className="faint">Sound Recorder</div>
+        <div className="onb-brand">
+          <Logo size={40} />
+          <div className="onb-wordmark">
+            <span className="display">Sonora</span>
+            <span className="onb-wordmark-sub">Sound Recorder</span>
           </div>
         </div>
-        {languageChosen && (
-          <ol className="onb-steps">
-            {STEPS.map((k, i) => (
-              <li key={k} className={i === step ? 'current' : i < step ? 'done' : ''} aria-current={i === step ? 'step' : undefined}>
-                <span className="onb-step-dot">{i < step ? <Check size={12} strokeWidth={2.4} aria-hidden="true" /> : i + 1}</span>
-                <span>{t(k)}</span>
-              </li>
-            ))}
-          </ol>
-        )}
+        <AnimatePresence initial={false}>
+          {languageChosen && (
+            <motion.ol className="onb-steps" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
+              {STEPS.map((k, i) => (
+                <li key={k} className={i === step ? 'current' : i < step ? 'done' : ''} aria-current={i === step ? 'step' : undefined}>
+                  <span className="onb-step-dot">{i < step ? <Check size={12} strokeWidth={2.4} aria-hidden="true" /> : i + 1}</span>
+                  <span>{t(k)}</span>
+                  {i === step && <motion.span layoutId="onb-current" className="onb-step-bg" transition={{ duration: 0.22, ease: EASE }} />}
+                </li>
+              ))}
+            </motion.ol>
+          )}
+        </AnimatePresence>
+        <div className="onb-art">
+          <WaveArt />
+        </div>
       </aside>
       <main className="onb-main" id="main">
+        <div className="onb-progress" aria-hidden="true">
+          <motion.span animate={{ scaleX: (step + 1) / STEPS.length }} transition={{ duration: 0.3, ease: EASE }} />
+        </div>
         {step > 0 && (
           <Button size="sm" variant="ghost" icon={ArrowLeft} className="onb-back" onClick={() => go(step - 1)}>
             {t('common.back')}
@@ -424,10 +483,10 @@ export function Onboarding() {
           <motion.div
             key={step}
             custom={dir}
-            initial={{ opacity: 0, x: dir * 24 }}
+            initial={{ opacity: 0, x: dir * 28 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: dir * -16 }}
-            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            exit={{ opacity: 0, x: dir * -18 }}
+            transition={{ duration: 0.2, ease: EASE }}
           >
             {steps[step]}
           </motion.div>

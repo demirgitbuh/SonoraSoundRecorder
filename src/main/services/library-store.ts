@@ -43,36 +43,80 @@ export class LibraryStore {
   private readonly transcriptText = new Map<string, string>()
   private readonly listeners = new Set<(s: LibrarySnapshot) => void>()
   private readonly reservedNames = new Set<string>()
+  private transcriptIndex: Promise<void> | null = null
 
   constructor(private readonly opts: LibraryStoreOptions) {
-    this.file = new JsonFile(join(opts.dataDir, 'library.json'), opts.logger, 'library', {
-      schemaVersion: LIBRARY_SCHEMA_VERSION,
-      recordings: [],
-      folders: [],
-      tags: []
-    })
+    this.file = new JsonFile(
+      join(opts.dataDir, 'library.json'),
+      opts.logger,
+      'library',
+      {
+        schemaVersion: LIBRARY_SCHEMA_VERSION,
+        recordings: [],
+        folders: [],
+        tags: []
+      },
+      150,
+      false
+    )
     this.transcriptsDir = join(opts.dataDir, 'transcripts')
     this.peaksDir = join(opts.dataDir, 'peaks')
   }
 
-  async load(): Promise<void> {
-    await mkdir(this.transcriptsDir, { recursive: true })
-    await mkdir(this.peaksDir, { recursive: true })
+  /**
+   * Loads the archive. With `deferred`, the transcript search index and the check for missing
+   * files are left to `warmUp()`, so the window can open without waiting for the disk.
+   */
+  async load(opts: { deferred?: boolean } = {}): Promise<void> {
+    await Promise.all([mkdir(this.transcriptsDir, { recursive: true }), mkdir(this.peaksDir, { recursive: true })])
     const loaded = await this.file.loadRaw()
     if (loaded) {
       const { library, dropped, tooNew, migrated } = parseLibrary(loaded.raw)
       if (dropped > 0) this.opts.logger.warn('library', `skipped ${dropped} invalid entries`)
       if (tooNew) this.opts.logger.warn('library', 'library was written by a newer version; unknown fields are ignored')
       if (migrated) this.opts.logger.info('library', 'library schema migrated')
-      this.file.set(library)
-      await this.file.flush()
+      // Only a repaired, migrated or backup-restored file is written back.
+      if (dropped > 0 || migrated || loaded.source === 'backup') {
+        this.file.set(library)
+        await this.file.flush()
+      } else {
+        this.file.adopt(library)
+      }
     }
-    for (const r of this.file.value.recordings) {
-      if (!r.transcript) continue
-      const t = await this.readTranscript(r.id)
-      if (t) this.transcriptText.set(r.id, t.segments.map((s) => s.text).join(' '))
-    }
+    if (!opts.deferred) await this.warmUp()
+  }
+
+  /** Builds the transcript search index and marks files that disappeared from disk. */
+  async warmUp(): Promise<void> {
+    await this.ensureTranscriptIndex()
     await this.checkMissing()
+  }
+
+  /** Loads the text of every transcript for archive search, once. */
+  ensureTranscriptIndex(): Promise<void> {
+    let pending = this.transcriptIndex
+    if (!pending) {
+      pending = this.buildTranscriptIndex().catch((err: unknown) => {
+        this.transcriptIndex = null
+        this.opts.logger.warn('library', `transcript index failed: ${(err as Error).message}`)
+      })
+      this.transcriptIndex = pending
+    }
+    return pending
+  }
+
+  private async buildTranscriptIndex(): Promise<void> {
+    const ids = this.file.value.recordings.filter((r) => r.transcript && !this.transcriptText.has(r.id)).map((r) => r.id)
+    let next = 0
+    const worker = async (): Promise<void> => {
+      while (next < ids.length) {
+        const id = ids[next++]!
+        const t = await this.readTranscript(id)
+        // A transcript written meanwhile is newer than the file read here.
+        if (t && !this.transcriptText.has(id)) this.transcriptText.set(id, t.segments.map((s) => s.text).join(' '))
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(8, ids.length) }, worker))
   }
 
   snapshot(): LibrarySnapshot {
@@ -111,13 +155,19 @@ export class LibraryStore {
   /** Marks recordings whose file vanished from disk (deleted or moved outside Sonora). */
   async checkMissing(): Promise<void> {
     let changed = false
-    for (const r of this.file.value.recordings) {
-      const exists = await pathExists(r.filePath)
-      if (r.missing === exists) {
-        r.missing = !exists
-        changed = true
+    const list = this.file.value.recordings
+    let next = 0
+    const worker = async (): Promise<void> => {
+      while (next < list.length) {
+        const r = list[next++]!
+        const exists = await pathExists(r.filePath)
+        if (r.missing === exists) {
+          r.missing = !exists
+          changed = true
+        }
       }
     }
+    await Promise.all(Array.from({ length: Math.min(16, list.length) }, worker))
     if (changed) {
       this.file.set(this.file.value)
       this.changed()

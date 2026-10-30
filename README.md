@@ -36,6 +36,7 @@
 - **Searchable archive.** List or card view, folders, tags, favorites and notes. Search covers names, notes, tags and transcripts. Filter by date, length, format, folder and tag; bulk export, move, tag or delete; import with content-based validation; and Sonora's own trash with restore.
 - **Countdown, schedules, markers and live monitoring.** All optional; time markers can be added during recording.
 - **Tray & mini panel.** Closing the window keeps recordings running. Quitting with recordings open stops them safely without losing audio.
+- **Private by design.** No account, no analytics, no telemetry. The only network access is the optional update check on GitHub. See the [Privacy Policy](docs/PRIVACY.md).
 - **Six languages, accessible UI.** English, Türkçe, Deutsch, Français, 中文 and Русский. Includes keyboard navigation, screen-reader announcements, high contrast, interface scaling and reduced motion.
 - **Updates from GitHub Releases.** Sonora shows the new version and its release notes, and nothing is installed without your consent. Recordings, settings and archive data are kept.
 - **Developer mode.** An optional page with a live log, process metrics, audio engine and whisper.cpp tuning, custom FFmpeg/whisper builds, Chromium switches, a key tester, an FFprobe inspector, test tones and fault injection. Off by default; turning it off restores the standard behavior. See [docs/DEVELOPER.md](docs/DEVELOPER.md).
@@ -107,6 +108,7 @@ See [docs/CI.md](docs/CI.md).
 | Updates & data protection | [docs/UPDATES.md](docs/UPDATES.md) |
 | GitHub Actions usage | [docs/CI.md](docs/CI.md) |
 | Developer mode | [docs/DEVELOPER.md](docs/DEVELOPER.md) |
+| Terms of Use · Privacy Policy | [docs/TERMS.md](docs/TERMS.md) · [docs/PRIVACY.md](docs/PRIVACY.md) |
 | What is tested automatically vs. manually | [docs/TESTING.md](docs/TESTING.md) |
 | Release notes | [docs/release-notes](docs/release-notes) |
 
@@ -124,7 +126,7 @@ See [docs/CI.md](docs/CI.md).
 ## License
 
 Sonora Sound Recorder is free software under the [GNU General Public License v3.0](LICENSE).
-Bundled components and their licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Bundled components and their licenses, including the Inter and Instrument Serif typefaces (SIL OFL 1.1), are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Use of the app is subject to the [Terms of Use](docs/TERMS.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/divider-dark.svg">

@@ -3,6 +3,7 @@ import { createSessionConfig } from '../../../shared/settings'
 import type { EngineCommand, EngineSnapshot } from '../../../shared/ipc'
 import type { Schedule, SessionConfig } from '../../../shared/types'
 import { createTranslator } from '../../../shared/i18n'
+import { legalAccepted } from '../../../shared/legal'
 import type { MessageKey } from '../../../shared/i18n'
 import { invoke, on, send } from '../api'
 import { useApp } from '../stores/app'
@@ -129,6 +130,10 @@ class Engine {
     }
     const target = cmd.sessionId ? this.controllers.get(cmd.sessionId) : this.selected()
     if (!target) return
+    // Until the current terms are accepted, keys, tray and mini panel cannot start a recording.
+    const settings = useApp.getState().settings
+    const idle = target.state === 'ready' || target.state === 'error'
+    if (cmd.action === 'toggleRecord' && idle && cmd.origin !== 'schedule' && settings && !legalAccepted(settings.legal)) return
     switch (cmd.action) {
       case 'toggleRecord':
         await target.toggleRecord(cmd.origin === 'schedule' ? 'schedule' : 'user')

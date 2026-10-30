@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: '24'
+  NODE_VERSION: '24.22.1'
   WHISPER_CPP_TAG: v1.9.5
   ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
   FORCE_COLOR: '1'
@@ -40,6 +40,47 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+  e2e:
+    name: End-to-end test and screenshots
+    needs: checks
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies (lockfile)
+        run: npm ci
+
+      - name: Download the Electron runtime
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: ''
+        run: node node_modules/electron/install.js
+
+      - name: Fetch pinned FFmpeg / FFprobe
+        run: npm run fetch:ffmpeg
+
+      - name: Production build
+        run: npm run build
+
+      - name: Virtual display
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb
+
+      - name: Run the app end to end (fake microphone)
+        run: xvfb-run -a --server-args="-screen 0 1600x1000x24" node scripts/e2e.mjs
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-screenshots
+          path: e2e-screenshots/
+          retention-days: 14
+          if-no-files-found: ignore
 
   package:
     name: Package ${{ matrix.target }}-${{ matrix.arch }}

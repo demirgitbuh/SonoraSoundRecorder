@@ -28,6 +28,8 @@ extraResources:
     to: LICENSE.txt
   - from: THIRD_PARTY_NOTICES.md
     to: THIRD_PARTY_NOTICES.md
+  - from: src/renderer/src/assets/fonts/OFL-InstrumentSerif.txt
+    to: licenses/OFL-InstrumentSerif.txt
 
 publish:
   provider: github

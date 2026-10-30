@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.0
+
+Full notes: [docs/release-notes/0.2.0.md](docs/release-notes/0.2.0.md).
+
+- **Security**
+  - Electron 44.10.0 with Node.js 24.22.1, which includes the fix for CVE-2026-111497 and the other October 2026 Node.js fixes.
+  - zod 4, patched undici and fast-uri, and vitest 5. `npm audit` reports no vulnerabilities.
+- **Design**
+  - Instrument Serif for titles and the recording clock.
+  - A calmer recorder with the format line under the record button and no explanatory texts.
+  - A resizable, collapsible side panel with collapsible cards.
+  - An animated first start and update dialog, and a branded Windows installer.
+- **Fixed**: automatic session names follow the interface language.
+- **New**
+  - Terms of Use and Privacy Policy in six languages, with a new Settings → About page.
+  - "Also in the mini panel" shortcut setting.
+- **Performance**
+  - One shared animation loop that stops when idle or hidden, and a recorder that renders once per second.
+  - Faster start, with lazily loaded pages and less disk writing during recording.
+- **CI**: an end-to-end test of the real app with a simulated microphone and screenshots of every screen.
+
 ## 0.1.1
 
 Full notes: [docs/release-notes/0.1.1.md](docs/release-notes/0.1.1.md).

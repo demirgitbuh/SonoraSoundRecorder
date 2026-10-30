@@ -30,6 +30,7 @@ export class SettingsStore {
   private readonly file: JsonFile<Settings>
   private readonly profilesFile: JsonFile<{ schemaVersion: number; profiles: SettingsProfile[] }>
   private readonly listeners = new Set<(s: Settings, prev: Settings) => void>()
+  private normalizer: ((s: Settings) => Settings) | null = null
 
   constructor(
     private readonly dir: string,
@@ -92,12 +93,24 @@ export class SettingsStore {
     return { settings, firstRun, migratedFrom }
   }
 
+  /**
+   * Adjusts every new settings value before it is stored (and the current one right away). It
+   * must return the same object when nothing changes.
+   */
+  setNormalizer(fn: (s: Settings) => Settings): void {
+    this.normalizer = fn
+    const current = this.file.value
+    const next = fn(current)
+    if (next !== current) this.file.set(next)
+  }
+
   onChange(listener: (s: Settings, prev: Settings) => void): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
   }
 
-  private commit(next: Settings): Settings {
+  private commit(proposed: Settings): Settings {
+    const next = this.normalizer ? this.normalizer(proposed) : proposed
     const prev = this.file.value
     this.file.set(next)
     for (const l of this.listeners) {

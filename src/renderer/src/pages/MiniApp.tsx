@@ -9,13 +9,14 @@ import { StatePill } from '../components/status'
 import { useDocumentPrefs, useInAppShortcuts } from '../hooks'
 import { useT } from '../i18n'
 import { useApp } from '../stores/app'
-import { formatClock } from '../util/format'
+import { SerifClock } from '../components/clock'
 
 /** Small always-on-top recording panel. It controls the selected session through the main window. */
 export function MiniApp() {
   const t = useT()
   useDocumentPrefs()
   const bindings = useApp((s) => s.settings?.shortcuts.bindings)
+  const keysInPanel = useApp((s) => s.settings?.shortcuts.miniPanel ?? true)
   const [snap, setSnap] = useState<EngineSnapshot>({ sessions: [], selectedId: null, unsavedPreviews: 0 })
   useEffect(() => {
     void invoke('engine:snapshot').then(setSnap)
@@ -23,12 +24,12 @@ export function MiniApp() {
   }, [])
   const dispatch = (action: ShortcutAction): void => void invoke('engine:dispatch', { action, origin: 'mini' })
   // Global shortcuts are released while the panel has focus, so the panel handles them itself.
-  useInAppShortcuts(dispatch)
+  useInAppShortcuts(dispatch, keysInPanel)
   const s = snap.sessions.find((x) => x.id === snap.selectedId) ?? snap.sessions[0]
   const state = s?.state ?? 'ready'
   const capturing = state === 'recording' || state === 'paused'
   const hint = (label: string, action: ShortcutAction): string =>
-    bindings ? `${label} (${acceleratorKeycaps(bindings[action], platform, t('keys.space')).join('+')})` : label
+    bindings && keysInPanel ? `${label} (${acceleratorKeycaps(bindings[action], platform, t('keys.space')).join('+')})` : label
   const pauseLabel = state === 'paused' ? t('record.resume') : t('record.pause')
   const recordLabel = capturing ? t('record.stop') : t('record.start')
   return (
@@ -46,7 +47,7 @@ export function MiniApp() {
       </div>
       <div className="mini-body">
         <div className="stack" style={{ gap: 4, minWidth: 0 }}>
-          <span className="mini-time tnum">{formatClock(s?.elapsedMs ?? 0, true)}</span>
+          <SerifClock ms={s?.elapsedMs ?? 0} className="mini-time" />
           <StatePill state={state} />
         </div>
         <div className="spacer" />

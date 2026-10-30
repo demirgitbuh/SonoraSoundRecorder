@@ -112,10 +112,7 @@ export function CollectionsPage() {
   return (
     <div className="collections-page">
       <div className="page-head">
-        <div>
-          <h1>{t('nav.collections')}</h1>
-          <p className="muted">{t('collections.subtitle')}</p>
-        </div>
+        <h1>{t('nav.collections')}</h1>
       </div>
       <div className="two-col">
         {section('folder')}

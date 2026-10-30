@@ -3,7 +3,7 @@ import { DEFAULT_BINDINGS, acceleratorKeycaps, eventToAccelerator, isModifierCod
 import { SHORTCUT_ACTIONS } from '../../../shared/types'
 import type { ShortcutAction, ShortcutBindings, ShortcutScope } from '../../../shared/types'
 import { invoke, platform } from '../api'
-import { Button, Keycaps, Notice, Segmented } from '../components/controls'
+import { Button, Keycaps, Notice, Segmented, Switch } from '../components/controls'
 import { CircleAlert, CircleCheck, ICON_STROKE, Info, Keyboard } from '../components/icons'
 import { useT } from '../i18n'
 import type { MessageKey } from '../i18n'
@@ -13,12 +13,6 @@ const ACTION_KEY: Record<ShortcutAction, MessageKey> = {
   toggleRecord: 'shortcuts.toggleRecord',
   togglePause: 'shortcuts.togglePause',
   addMarker: 'shortcuts.addMarker'
-}
-
-const ACTION_DESC: Record<ShortcutAction, MessageKey> = {
-  toggleRecord: 'shortcuts.toggleRecordDesc',
-  togglePause: 'shortcuts.togglePauseDesc',
-  addMarker: 'shortcuts.addMarkerDesc'
 }
 
 /**
@@ -114,7 +108,17 @@ export function ShortcutEditor() {
             { value: 'app', label: t('shortcuts.scopeApp') }
           ]}
         />
-        <p className="field-desc">{scope === 'global' ? t('shortcuts.scopeGlobalDesc') : t('shortcuts.scopeAppDesc')}</p>
+      </div>
+      <div className="row nowrap shortcut-mini">
+        <span className="field-label" id="shortcut-mini-label">
+          {t('shortcuts.miniPanel')}
+        </span>
+        <div className="spacer" />
+        <Switch
+          checked={settings.shortcuts.miniPanel}
+          label={t('shortcuts.miniPanel')}
+          onChange={(v) => void useApp.getState().updateSettings({ shortcuts: { miniPanel: v } })}
+        />
       </div>
       {singleKeyGlobal && <Notice kind="warning">{t('shortcuts.singleKeyWarning')}</Notice>}
       <ul className="shortcut-list">
@@ -125,7 +129,6 @@ export function ShortcutEditor() {
             <li key={action} className="shortcut-row">
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div className="field-label">{t(ACTION_KEY[action])}</div>
-                <div className="field-desc">{t(ACTION_DESC[action])}</div>
                 {st && (
                   <div className={`shortcut-status ${ok ? 'ok' : 'bad'}`}>
                     {ok ? <CircleCheck size={13} strokeWidth={ICON_STROKE} aria-hidden="true" /> : st.state === 'suspended' ? <Info size={13} strokeWidth={ICON_STROKE} aria-hidden="true" /> : <CircleAlert size={13} strokeWidth={ICON_STROKE} aria-hidden="true" />}

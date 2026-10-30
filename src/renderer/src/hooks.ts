@@ -13,10 +13,11 @@ const KEY_OPERATED = 'button, [role="button"], [role="switch"], [role="radio"], 
  * recorder and local key areas (the waveform editor) never trigger recording commands. Space/Enter
  * keep their normal meaning on a control that was focused with the keyboard.
  */
-export function useInAppShortcuts(onAction: (action: ShortcutAction) => void): void {
+export function useInAppShortcuts(onAction: (action: ShortcutAction) => void, enabled = true): void {
   const actionRef = useRef(onAction)
   actionRef.current = onAction
   useEffect(() => {
+    if (!enabled) return
     const handler = (e: KeyboardEvent): void => {
       const st = useApp.getState()
       const s = st.settings
@@ -42,7 +43,7 @@ export function useInAppShortcuts(onAction: (action: ShortcutAction) => void): v
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [])
+  }, [enabled])
 }
 
 /** Mirrors theme, contrast, motion, language and scale preferences onto the document. */
